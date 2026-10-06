@@ -1,35 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import Header from './components/Header';
+import FlightSearch from './components/FlightSearch';
+import FlightList from './components/FlightList';
+import FlightHeader from './components/FlightHeader';
+import AnalystBrief from './components/AnalystBrief';
+import FlightTimeline from './components/FlightTimeline';
+import WeatherPanel from './components/WeatherPanel';
+import DisruptionPanel from './components/DisruptionPanel';
+import CandidateBreakdown from './components/CandidateBreakdown';
 import {
-  Plane,
-  Search,
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  CloudRain,
-  ShieldAlert,
-  Wind,
-  Thermometer,
-  Calendar,
-  Activity,
-  Layers,
-  ChevronRight,
-  RefreshCw,
-  ExternalLink,
-  MapPin,
-  FileText
-} from 'lucide-react';
+  fetchHealth,
+  fetchFlights,
+  fetchFlightDetail,
+  fetchFlightIntelligence,
+  fetchFlightTimeline,
+  fetchFlightWeather,
+  fetchFlightDisruptions,
+  fetchFlightAiAnalysis,
+} from './api';
 import './App.css';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { Activity, Clock, Cloud, Layers } from 'lucide-react';
 
 export default function App() {
-  const [flights, setFlights] = useState([]);
-  const [totalFlights, setTotalFlights] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // System Health
   const [systemHealth, setSystemHealth] = useState(null);
 
-  // Filters
+  // Flight Directory State
+  const [flights, setFlights] = useState([]);
+  const [totalFlights, setTotalFlights] = useState(0);
+  const [flightsLoading, setFlightsLoading] = useState(true);
+  const [flightsError, setFlightsError] = useState(null);
+
+  // Search & Filter State
   const [flightNumberFilter, setFlightNumberFilter] = useState('');
   const [originFilter, setOriginFilter] = useState('');
   const [delayStatusFilter, setDelayStatusFilter] = useState('');
@@ -43,60 +45,78 @@ export default function App() {
   const [disruptions, setDisruptions] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // Active View Tab in Details Panel
-  const [activeTab, setActiveTab] = useState('intelligence'); // 'intelligence', 'timeline', 'candidates', 'raw_evidence'
+  // Grounded AI Analyst State
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
+  const aiAbortControllerRef = useRef(null);
 
-  // Fetch system health on mount
+  // View Navigation inside Workspace
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState('dossier'); // 'dossier' | 'timeline' | 'weather_atc' | 'candidates'
+
+  // 1. Initial Health Check
+  const loadHealth = async () => {
+    const health = await fetchHealth();
+    setSystemHealth(health);
+  };
+
   useEffect(() => {
-    fetch(`${API_BASE}/health`)
-      .then((res) => res.json())
-      .then((data) => setSystemHealth(data))
-      .catch(() => setSystemHealth({ status: 'unreachable' }));
+    loadHealth();
+    const interval = setInterval(loadHealth, 30000);
+    return () => clearInterval(interval);
   }, []);
 
-  // Fetch flights on filter changes
-  const fetchFlights = async () => {
-    setLoading(true);
-    setError(null);
+  // 2. Fetch Flights Directory
+  const loadFlights = async (selectedIdToPreserve = null) => {
+    setFlightsLoading(true);
+    setFlightsError(null);
     try {
-      const params = new URLSearchParams();
-      if (flightNumberFilter) params.append('flight_number', flightNumberFilter);
-      if (originFilter) params.append('origin', originFilter);
-      if (delayStatusFilter) params.append('delay_status', delayStatusFilter);
-      params.append('limit', '50');
+      const data = await fetchFlights({
+        flightNumber: flightNumberFilter,
+        origin: originFilter,
+        delayStatus: delayStatusFilter,
+        limit: 50,
+      });
 
-      const res = await fetch(`${API_BASE}/flights?${params.toString()}`);
-      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-      const data = await res.json();
-      setFlights(data.flights || []);
+      const list = data.flights || [];
+      setFlights(list);
       setTotalFlights(data.total || 0);
 
-      // Auto-select first delayed flight if available, else first flight
-      if (data.flights && data.flights.length > 0) {
-        const delayed = data.flights.find((f) => f.departure_delay_minutes > 15);
-        const defaultId = delayed ? delayed.id : data.flights[0].id;
-        setSelectedFlightId(defaultId);
+      // Preserve selection or auto-select delayed flight
+      if (list.length > 0) {
+        if (selectedIdToPreserve && list.some((f) => f.id === selectedIdToPreserve)) {
+          setSelectedFlightId(selectedIdToPreserve);
+        } else if (!selectedFlightId || !list.some((f) => f.id === selectedFlightId)) {
+          const delayed = list.find((f) => f.departure_delay_minutes > 15);
+          setSelectedFlightId(delayed ? delayed.id : list[0].id);
+        }
       } else {
         setSelectedFlightId(null);
       }
     } catch (err) {
-      console.error(err);
-      setError('Failed to fetch flights from API');
+      console.error('Failed to load flights:', err);
+      setFlightsError(err.message || 'Error fetching flights');
     } finally {
-      setLoading(false);
+      setFlightsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchFlights();
+    loadFlights();
   }, [delayStatusFilter]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    fetchFlights();
+    loadFlights();
   };
 
-  // Fetch comprehensive flight intelligence bundle when selected flight changes
+  const handleResetFilters = () => {
+    setFlightNumberFilter('');
+    setOriginFilter('');
+    setDelayStatusFilter('');
+  };
+
+  // 3. Load Flight Details, Deterministic Intelligence, Timeline, Weather, and Disruptions
   useEffect(() => {
     if (!selectedFlightId) {
       setFlightDetail(null);
@@ -104,534 +124,235 @@ export default function App() {
       setTimeline(null);
       setWeather(null);
       setDisruptions(null);
+      setAiAnalysis(null);
       return;
     }
 
+    let isMounted = true;
+    setDetailLoading(true);
+
+    // Cancel any existing in-flight AI requests
+    if (aiAbortControllerRef.current) {
+      aiAbortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    aiAbortControllerRef.current = abortController;
+
     const loadFlightData = async () => {
-      setDetailLoading(true);
       try {
-        const [detailRes, intelRes, timelineRes, weatherRes, disruptRes] = await Promise.all([
-          fetch(`${API_BASE}/flights/${selectedFlightId}`),
-          fetch(`${API_BASE}/flights/${selectedFlightId}/intelligence`),
-          fetch(`${API_BASE}/flights/${selectedFlightId}/timeline`),
-          fetch(`${API_BASE}/flights/${selectedFlightId}/weather`),
-          fetch(`${API_BASE}/flights/${selectedFlightId}/disruptions`),
+        const [detailData, intelData, timelineData, weatherData, disruptData] = await Promise.all([
+          fetchFlightDetail(selectedFlightId),
+          fetchFlightIntelligence(selectedFlightId),
+          fetchFlightTimeline(selectedFlightId),
+          fetchFlightWeather(selectedFlightId),
+          fetchFlightDisruptions(selectedFlightId),
         ]);
 
-        if (detailRes.ok) setFlightDetail(await detailRes.json());
-        if (intelRes.ok) setIntelligence(await intelRes.json());
-        if (timelineRes.ok) setTimeline(await timelineRes.json());
-        if (weatherRes.ok) setWeather(await weatherRes.json());
-        if (disruptRes.ok) setDisruptions(await disruptRes.json());
+        if (isMounted) {
+          setFlightDetail(detailData);
+          setIntelligence(intelData);
+          setTimeline(timelineData);
+          setWeather(weatherData);
+          setDisruptions(disruptData);
+          setDetailLoading(false);
+        }
+
+        // 4. Fetch Grounded AI Analysis asynchronously so deterministic data renders immediately
+        if (isMounted) {
+          setAiLoading(true);
+          setAiError(null);
+          try {
+            const aiData = await fetchFlightAiAnalysis(selectedFlightId, abortController.signal);
+            if (isMounted) {
+              setAiAnalysis(aiData);
+            }
+          } catch (aiErr) {
+            if (aiErr.name !== 'AbortError' && isMounted) {
+              console.warn('AI analysis load failed; using fallback:', aiErr);
+              setAiError(aiErr.message);
+              // Construct seamless client fallback
+              setAiAnalysis({
+                status: 'unavailable',
+                flight_id: selectedFlightId,
+                analysis: {
+                  summary: intelData?.explanation_summary || 'Deterministic FlightPulse analysis active.',
+                  primary_cause: intelData?.primary_candidate?.category || 'UNKNOWN',
+                  confidence: intelData?.primary_candidate?.confidence || 'INSUFFICIENT',
+                  explanation: intelData?.explanation_summary || '',
+                  evidence_used: intelData?.candidates?.[0]?.evidence || [],
+                  limitations: ['Local AI analyst service offline; displaying deterministic engine findings.'],
+                },
+                model_used: null,
+                execution_time_ms: 0,
+              });
+            }
+          } finally {
+            if (isMounted) {
+              setAiLoading(false);
+            }
+          }
+        }
       } catch (err) {
-        console.error('Failed loading flight details:', err);
-      } finally {
-        setDetailLoading(false);
+        if (isMounted) {
+          console.error('Failed loading flight details:', err);
+          setDetailLoading(false);
+        }
       }
     };
 
     loadFlightData();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [selectedFlightId]);
 
-  const formatDateTime = (dtStr) => {
-    if (!dtStr) return 'N/A';
-    try {
-      const d = new Date(dtStr);
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) + ' UTC';
-    } catch {
-      return dtStr;
-    }
-  };
-
-  const getConfidenceBadgeClass = (confidence) => {
-    switch (confidence) {
-      case 'HIGH':
-        return 'badge-high';
-      case 'MEDIUM':
-        return 'badge-medium';
-      case 'LOW':
-        return 'badge-low';
-      default:
-        return 'badge-insufficient';
-    }
-  };
-
-  const getEventBadgeClass = (category) => {
-    switch (category) {
-      case 'WEATHER':
-        return 'badge-weather';
-      case 'ATC':
-        return 'badge-atc';
-      case 'FLIGHT':
-        return 'badge-flight';
-      case 'AIRLINE':
-        return 'badge-airline';
-      case 'AIRPORT':
-        return 'badge-airport';
-      default:
-        return 'badge-default';
-    }
-  };
-
   return (
-    <div className="flightpulse-app">
-      {/* Top Header */}
-      <header className="header">
-        <div className="header-brand">
-          <div className="logo-icon">
-            <Plane size={24} className="plane-icon" />
-          </div>
-          <div>
-            <h1 className="brand-title">FlightPulse</h1>
-            <p className="brand-subtitle">Deterministic Flight Delay Intelligence & Operational Attribution</p>
-          </div>
-        </div>
+    <div className="flightpulse-root">
+      {/* Top Application Header */}
+      <Header
+        systemHealth={systemHealth}
+        onRefresh={() => loadFlights(selectedFlightId)}
+        loading={flightsLoading}
+      />
 
-        <div className="header-meta">
-          <div className={`health-pill ${systemHealth?.status === 'healthy' ? 'healthy' : 'unhealthy'}`}>
-            <span className="dot"></span>
-            <span>API {systemHealth?.status === 'healthy' ? 'Connected' : 'Offline'}</span>
-          </div>
-          <button className="refresh-btn" onClick={fetchFlights} title="Refresh Data">
-            <RefreshCw size={16} />
-          </button>
-        </div>
-      </header>
+      {/* Main Operations Split View */}
+      <div className="fp-operations-layout">
+        {/* Left Column: Dispatch Flight Directory */}
+        <aside className="fp-dispatch-sidebar">
+          <FlightSearch
+            flightNumber={flightNumberFilter}
+            setFlightNumber={setFlightNumberFilter}
+            origin={originFilter}
+            setOrigin={setOriginFilter}
+            delayStatus={delayStatusFilter}
+            setDelayStatus={setDelayStatusFilter}
+            onSubmit={handleSearchSubmit}
+            onReset={handleResetFilters}
+            totalFlights={totalFlights}
+          />
 
-      {/* Main Layout */}
-      <div className="main-layout">
-        {/* Left Sidebar: Flight Search & Flight List */}
-        <aside className="sidebar">
-          {/* Search Form */}
-          <form className="search-form" onSubmit={handleSearchSubmit}>
-            <div className="search-input-group">
-              <Search size={16} className="search-icon" />
-              <input
-                type="text"
-                placeholder="Flight (e.g. UA415)"
-                value={flightNumberFilter}
-                onChange={(e) => setFlightNumberFilter(e.target.value)}
-                className="input-field"
-              />
-            </div>
-
-            <div className="filter-row">
-              <input
-                type="text"
-                placeholder="Origin (e.g. ORD)"
-                value={originFilter}
-                onChange={(e) => setOriginFilter(e.target.value)}
-                maxLength={4}
-                className="input-field-sm"
-              />
-              <select
-                value={delayStatusFilter}
-                onChange={(e) => setDelayStatusFilter(e.target.value)}
-                className="select-field"
-              >
-                <option value="">All Flights</option>
-                <option value="DELAYED">Delayed Only</option>
-                <option value="ON_TIME">On-Time</option>
-              </select>
-            </div>
-
-            <button type="submit" className="search-btn">
-              Apply Filters
-            </button>
-          </form>
-
-          {/* Flight List Header */}
-          <div className="flight-list-header">
-            <span>Available Flights ({totalFlights})</span>
-            <span className="source-tag">PostgreSQL Engine</span>
+          <div className="fp-roster-header mono">
+            <span>OPERATIONAL FLIGHT DIRECTORY</span>
+            <span>{flights.length} LOADED</span>
           </div>
 
-          {/* Flights Scroll List */}
-          <div className="flight-list">
-            {loading ? (
-              <div className="state-message">Loading flights...</div>
-            ) : error ? (
-              <div className="state-message error">{error}</div>
-            ) : flights.length === 0 ? (
-              <div className="state-message">No flights match the criteria.</div>
-            ) : (
-              flights.map((f) => {
-                const isSelected = f.id === selectedFlightId;
-                const isDelayed = f.departure_delay_minutes > 15;
-                return (
-                  <div
-                    key={f.id}
-                    className={`flight-item ${isSelected ? 'selected' : ''}`}
-                    onClick={() => setSelectedFlightId(f.id)}
-                  >
-                    <div className="flight-item-top">
-                      <span className="flight-num">{f.flight_number}</span>
-                      <span className={`status-badge ${isDelayed ? 'delayed' : 'ontime'}`}>
-                        {isDelayed ? `+${f.departure_delay_minutes}m` : 'ON TIME'}
-                      </span>
-                    </div>
-
-                    <div className="flight-item-route">
-                      <span className="airport-code">{f.origin_iata}</span>
-                      <span className="route-arrow">→</span>
-                      <span className="airport-code">{f.destination_iata}</span>
-                      <span className="airline-name">{f.airline_name}</span>
-                    </div>
-
-                    <div className="flight-item-bottom">
-                      <span className="flight-date">{f.flight_date}</span>
-                      <span className="flight-status">{f.status}</span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+          <FlightList
+            flights={flights}
+            selectedFlightId={selectedFlightId}
+            onSelectFlight={(id) => setSelectedFlightId(id)}
+            loading={flightsLoading}
+            error={flightsError}
+          />
         </aside>
 
-        {/* Right Content Area: Intelligence & Disruption Analysis */}
-        <main className="content-pane">
-          {detailLoading ? (
-            <div className="center-loader">
-              <RefreshCw size={32} className="spin" />
-              <p>Analyzing multi-signal evidence for flight...</p>
-            </div>
-          ) : !flightDetail ? (
-            <div className="center-loader">
-              <Plane size={48} className="muted-icon" />
-              <p>Select a flight from the list to inspect delay intelligence.</p>
+        {/* Right Main Column: Investigation Workspace */}
+        <main className="fp-workspace-main">
+          {!selectedFlightId || !flightDetail ? (
+            <div className="fp-empty-workspace">
+              <div className="fp-empty-banner mono">
+                <span className="empty-kicker">OPERATIONAL STATUS: READY</span>
+                <h2>SELECT A FLIGHT IDENTIFIER TO COMMENCE DELAY INVESTIGATION</h2>
+                <p>
+                  FlightPulse correlates airport METAR observations, FAA National Airspace System advisories, and gate timestamps through deterministic logic and local Ollama synthesis.
+                </p>
+              </div>
             </div>
           ) : (
-            <div className="flight-detail-container">
-              {/* Flight Summary Header Card */}
-              <div className="flight-banner">
-                <div className="banner-primary">
-                  <div className="route-display">
-                    <div className="route-endpoint">
-                      <span className="iata">{flightDetail.origin_iata}</span>
-                      <span className="city">{flightDetail.origin_city}</span>
-                    </div>
-                    <div className="route-path">
-                      <Plane size={20} className="plane-flying" />
-                      <div className="flight-line"></div>
-                      <span className="distance">{flightDetail.airline_name} • {flightDetail.flight_number}</span>
-                    </div>
-                    <div className="route-endpoint">
-                      <span className="iata">{flightDetail.destination_iata}</span>
-                      <span className="city">{flightDetail.destination_city}</span>
-                    </div>
-                  </div>
+            <div className="fp-investigation-workspace">
+              {/* Primary Flight Header & Carrier vs FlightPulse Attribution */}
+              <FlightHeader
+                flight={flightDetail}
+                intelligence={intelligence}
+              />
 
-                  <div className="delay-metric-box">
-                    <span className="metric-label">DEPARTURE DELAY</span>
-                    <span className={`metric-value ${flightDetail.departure_delay_minutes > 15 ? 'delayed' : 'ontime'}`}>
-                      {flightDetail.departure_delay_minutes > 0 ? `+${flightDetail.departure_delay_minutes} min` : 'On Time'}
-                    </span>
-                    <span className="reported-cat">
-                      Carrier Reported: <strong>{flightDetail.delay_category || 'NONE'}</strong>
-                    </span>
-                  </div>
-                </div>
+              {/* Core Grounded AI Analyst Panel */}
+              <AnalystBrief
+                aiAnalysis={aiAnalysis}
+                loading={aiLoading}
+                error={aiError}
+                deterministicIntelligence={intelligence}
+                onRetry={() => {
+                  if (selectedFlightId) {
+                    setAiLoading(true);
+                    fetchFlightAiAnalysis(selectedFlightId)
+                      .then((d) => setAiAnalysis(d))
+                      .catch(() => {})
+                      .finally(() => setAiLoading(false));
+                  }
+                }}
+              />
 
-                <div className="banner-details-grid">
-                  <div className="detail-item">
-                    <span className="item-label">Scheduled Departure</span>
-                    <span className="item-val">{formatDateTime(flightDetail.scheduled_departure)}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="item-label">Actual Departure</span>
-                    <span className="item-val">{formatDateTime(flightDetail.actual_departure)}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="item-label">Scheduled Arrival</span>
-                    <span className="item-val">{formatDateTime(flightDetail.scheduled_arrival)}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="item-label">Actual Arrival</span>
-                    <span className="item-val">{formatDateTime(flightDetail.actual_arrival)}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="item-label">Aircraft / Equipment</span>
-                    <span className="item-val">{flightDetail.aircraft_type || 'Commercial Jet'}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="item-label">Operational Status</span>
-                    <span className="item-val">{flightDetail.status}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Navigation Tabs */}
-              <div className="nav-tabs">
+              {/* Workspace Navigation Sub-Bar */}
+              <div className="fp-workspace-nav">
                 <button
-                  className={`tab-btn ${activeTab === 'intelligence' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('intelligence')}
+                  className={`fp-nav-tab ${activeWorkspaceTab === 'dossier' ? 'is-active' : ''} mono`}
+                  onClick={() => setActiveWorkspaceTab('dossier')}
                 >
-                  <Activity size={16} />
-                  <span>Why Was This Delayed?</span>
+                  <Activity size={13} className="inline-icon" />
+                  <span>INVESTIGATION DOSSIER</span>
                 </button>
                 <button
-                  className={`tab-btn ${activeTab === 'timeline' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('timeline')}
+                  className={`fp-nav-tab ${activeWorkspaceTab === 'timeline' ? 'is-active' : ''} mono`}
+                  onClick={() => setActiveWorkspaceTab('timeline')}
                 >
-                  <Clock size={16} />
-                  <span>Disruption Timeline ({timeline?.total_events || 0})</span>
+                  <Clock size={13} className="inline-icon" />
+                  <span>CHRONOLOGICAL TIMELINE ({timeline?.total_events || 0})</span>
                 </button>
                 <button
-                  className={`tab-btn ${activeTab === 'candidates' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('candidates')}
+                  className={`fp-nav-tab ${activeWorkspaceTab === 'weather_atc' ? 'is-active' : ''} mono`}
+                  onClick={() => setActiveWorkspaceTab('weather_atc')}
                 >
-                  <Layers size={16} />
-                  <span>Ranked Candidates ({intelligence?.candidates?.length || 0})</span>
+                  <Cloud size={13} className="inline-icon" />
+                  <span>METAR & FAA ADVISORIES</span>
                 </button>
                 <button
-                  className={`tab-btn ${activeTab === 'raw_evidence' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('raw_evidence')}
+                  className={`fp-nav-tab ${activeWorkspaceTab === 'candidates' ? 'is-active' : ''} mono`}
+                  onClick={() => setActiveWorkspaceTab('candidates')}
                 >
-                  <FileText size={16} />
-                  <span>Raw Signals & METAR</span>
+                  <Layers size={13} className="inline-icon" />
+                  <span>CANDIDATE RANKING ({intelligence?.candidates?.length || 0})</span>
                 </button>
               </div>
 
-              {/* TAB 1: Why Was This Flight Delayed? (Primary Intelligence Attribution) */}
-              {activeTab === 'intelligence' && (
-                <div className="tab-content">
-                  {intelligence?.primary_candidate ? (
-                    <div className="attribution-card">
-                      <div className="attribution-header">
-                        <div className="attribution-title-group">
-                          <span className="attribution-subtitle">PRIMARY ATTRIBUTED CAUSE</span>
-                          <h2 className="attribution-title">{intelligence.primary_candidate.category}</h2>
-                        </div>
-                        <div className="attribution-badges">
-                          <span className={`confidence-badge ${getConfidenceBadgeClass(intelligence.primary_candidate.confidence)}`}>
-                            {intelligence.primary_candidate.confidence} CONFIDENCE
-                          </span>
-                          <span className="score-badge">
-                            Score: {Math.round(intelligence.primary_candidate.score * 100)}%
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="attribution-explanation">
-                        <p>{intelligence.explanation_summary}</p>
-                      </div>
-
-                      <div className="evidence-section">
-                        <h4 className="evidence-header">Deterministic Supporting Evidence:</h4>
-                        <ul className="evidence-list">
-                          {intelligence.candidates && intelligence.candidates[0]?.evidence?.length > 0 ? (
-                            intelligence.candidates[0].evidence.map((item, idx) => (
-                              <li key={idx} className="evidence-item">
-                                <CheckCircle2 size={16} className="evidence-check" />
-                                <span>{item}</span>
-                              </li>
-                            ))
-                          ) : (
-                            <li className="evidence-item muted">
-                              No corroborating meteorological or air traffic management advisories matched the flight departure window.
-                            </li>
-                          )}
-                        </ul>
-                      </div>
-
-                      <div className="attribution-footer">
-                        <ShieldAlert size={14} className="shield-icon" />
-                        <span>
-                          Attribution is deterministically generated by the FlightPulse intelligence engine using multi-signal correlation across weather observations, FAA NAS status, and operational gate logs.
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="attribution-card">
-                      <p>Flight intelligence attribution currently unavailable.</p>
-                    </div>
-                  )}
-
-                  {/* Summary Callout Cards */}
-                  <div className="signals-summary-row">
-                    <div className="summary-box">
-                      <div className="summary-box-header">
-                        <CloudRain size={18} className="box-icon weather" />
-                        <span>Departure Weather Context</span>
-                      </div>
-                      <p className="summary-text">
-                        {weather?.origin_observations?.length > 0
-                          ? `${weather.origin_observations.length} METAR observations recorded around scheduled departure (${weather.origin_airport}). Recent condition: ${weather.origin_observations[0].condition_code}, Wind: ${weather.origin_observations[0].wind_speed_knots || 0} kts.`
-                          : `No severe atmospheric conditions reported for origin airport ${flightDetail.origin_iata}.`}
-                      </p>
+              {/* Workspace Content Display */}
+              <div className="fp-workspace-content">
+                {activeWorkspaceTab === 'dossier' && (
+                  <div className="fp-editorial-dossier-grid">
+                    {/* Left Column: Timeline progression */}
+                    <div className="fp-dossier-col-timeline">
+                      <FlightTimeline timeline={timeline} loading={detailLoading} />
                     </div>
 
-                    <div className="summary-box">
-                      <div className="summary-box-header">
-                        <AlertTriangle size={18} className="box-icon atc" />
-                        <span>FAA Ground Stops & NAS Notices</span>
-                      </div>
-                      <p className="summary-text">
-                        {disruptions?.disruptions?.length > 0
-                          ? `${disruptions.disruptions.length} FAA air traffic restriction notice(s) active during operations at ${disruptions.disruptions[0].airport_code}: ${disruptions.disruptions[0].title}.`
-                          : `Zero active FAA ground stops or NAS delay programs affecting ${flightDetail.origin_iata} or route.`}
-                      </p>
+                    {/* Right Column: Telemetry & Notices */}
+                    <div className="fp-dossier-col-telemetry">
+                      <WeatherPanel weather={weather} loading={detailLoading} />
+                      <DisruptionPanel disruptions={disruptions} loading={detailLoading} />
+                      <CandidateBreakdown intelligence={intelligence} loading={detailLoading} />
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* TAB 2: Chronological Disruption Timeline */}
-              {activeTab === 'timeline' && (
-                <div className="tab-content">
-                  <div className="timeline-container">
-                    <div className="timeline-header-info">
-                      <h3>Factual Chronological Progression</h3>
-                      <p>Assembled strictly from database event milestones, METAR records, and FAA disruption notices without fabrication.</p>
-                    </div>
-
-                    <div className="timeline-stream">
-                      {timeline?.timeline?.map((ev, index) => (
-                        <div key={index} className="timeline-item">
-                          <div className="timeline-time">
-                            <span className="time-val">{formatDateTime(ev.time)}</span>
-                            <span className="time-date">{new Date(ev.time).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
-                          </div>
-
-                          <div className="timeline-node">
-                            <span className={`node-dot ${getEventBadgeClass(ev.category)}`}></span>
-                            {index < timeline.timeline.length - 1 && <div className="node-line"></div>}
-                          </div>
-
-                          <div className="timeline-card">
-                            <div className="timeline-card-header">
-                              <span className={`category-tag ${getEventBadgeClass(ev.category)}`}>
-                                {ev.category}
-                              </span>
-                              <span className="timeline-title">{ev.title}</span>
-                              {ev.severity && <span className="severity-badge">{ev.severity}</span>}
-                            </div>
-                            {ev.detail && <p className="timeline-detail">{ev.detail}</p>}
-                            {ev.source && <span className="timeline-source">Source: {ev.source}</span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                {activeWorkspaceTab === 'timeline' && (
+                  <div className="fp-single-view">
+                    <FlightTimeline timeline={timeline} loading={detailLoading} />
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* TAB 3: Ranked Candidates Breakdown */}
-              {activeTab === 'candidates' && (
-                <div className="tab-content">
-                  <div className="candidates-list">
-                    <div className="candidates-header">
-                      <h3>All Evaluated Candidate Hypotheses</h3>
-                      <p>
-                        The intelligence engine scores every candidate category deterministically. Candidates with zero supporting evidence are scored down or marked insufficient.
-                      </p>
-                    </div>
-
-                    {intelligence?.candidates?.map((candidate, idx) => (
-                      <div key={idx} className="candidate-card">
-                        <div className="candidate-top">
-                          <div className="candidate-rank">#{idx + 1}</div>
-                          <div className="candidate-cat">
-                            <h4>{candidate.category}</h4>
-                            <span className="primary-sig">Signal: {candidate.primary_signal}</span>
-                          </div>
-                          <div className="candidate-metrics">
-                            <span className={`confidence-badge ${getConfidenceBadgeClass(candidate.confidence)}`}>
-                              {candidate.confidence}
-                            </span>
-                            <span className="candidate-score">{(candidate.score * 100).toFixed(0)}%</span>
-                          </div>
-                        </div>
-
-                        <div className="candidate-evidence">
-                          {candidate.evidence?.length > 0 ? (
-                            <ul>
-                              {candidate.evidence.map((ev, i) => (
-                                <li key={i}>{ev}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <span className="no-evidence">No corroborating evidence detected.</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                {activeWorkspaceTab === 'weather_atc' && (
+                  <div className="fp-telemetry-dual-view">
+                    <WeatherPanel weather={weather} loading={detailLoading} />
+                    <DisruptionPanel disruptions={disruptions} loading={detailLoading} />
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* TAB 4: Raw Evidence & METAR Records */}
-              {activeTab === 'raw_evidence' && (
-                <div className="tab-content">
-                  {/* Weather Observations Table */}
-                  <div className="raw-section">
-                    <h3 className="section-title">
-                      <CloudRain size={18} /> Origin Airport Weather Observations ({weather?.origin_airport})
-                    </h3>
-                    {weather?.origin_observations?.length > 0 ? (
-                      <div className="table-responsive">
-                        <table className="data-table">
-                          <thead>
-                            <tr>
-                              <th>Time (UTC)</th>
-                              <th>Condition</th>
-                              <th>Temp (°C)</th>
-                              <th>Wind (kts)</th>
-                              <th>Gust (kts)</th>
-                              <th>Visibility (mi)</th>
-                              <th>Altimeter</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {weather.origin_observations.map((obs) => (
-                              <tr key={obs.id}>
-                                <td>{formatDateTime(obs.observation_time)}</td>
-                                <td><span className="condition-pill">{obs.condition_code}</span></td>
-                                <td>{obs.temperature_c != null ? `${obs.temperature_c}°C` : '-'}</td>
-                                <td>{obs.wind_speed_knots != null ? `${obs.wind_speed_knots} kts` : '-'}</td>
-                                <td>{obs.wind_gust_knots != null ? `${obs.wind_gust_knots} kts` : '-'}</td>
-                                <td>{obs.visibility_miles != null ? `${obs.visibility_miles} mi` : '-'}</td>
-                                <td>{obs.altimeter_inhg != null ? `${obs.altimeter_inhg} inHg` : '-'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <p className="empty-notice">No weather observations stored within the temporal query window.</p>
-                    )}
+                {activeWorkspaceTab === 'candidates' && (
+                  <div className="fp-single-view">
+                    <CandidateBreakdown intelligence={intelligence} loading={detailLoading} />
                   </div>
-
-                  {/* FAA Disruption Events */}
-                  <div className="raw-section">
-                    <h3 className="section-title">
-                      <AlertTriangle size={18} /> FAA Disruption Events & NAS Advisories
-                    </h3>
-                    {disruptions?.disruptions?.length > 0 ? (
-                      <div className="disruptions-cards">
-                        {disruptions.disruptions.map((d) => (
-                          <div key={d.id} className="disruption-item-card">
-                            <div className="disruption-item-header">
-                              <span className="disruption-badge">{d.event_type}</span>
-                              <span className="disruption-apt">{d.airport_code}</span>
-                              <span className="disruption-severity">{d.severity}</span>
-                            </div>
-                            <h4 className="disruption-item-title">{d.title}</h4>
-                            <p className="disruption-item-desc">{d.description}</p>
-                            <div className="disruption-meta">
-                              <span>Window: {formatDateTime(d.start_time)} → {formatDateTime(d.end_time)}</span>
-                              <span>Source: {d.source || 'FAA NAS'}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="empty-notice">No FAA disruption notices logged for this flight's departure window.</p>
-                    )}
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
         </main>
