@@ -28,24 +28,27 @@ def build_flight_timeline(conn: connection, flight_id: int) -> Optional[FlightTi
     raw_events: List[TimelineEventItem] = []
 
     # 1. Flight Milestones
-    raw_events.append(TimelineEventItem(
-        time=flight.scheduled_departure,
-        event_type="SCHEDULED_DEPARTURE",
-        category="FLIGHT",
-        title="Scheduled Departure",
-        detail=f"Scheduled departure from {flight.origin_iata} to {flight.destination_iata}",
-        severity="INFO",
-        source="FLIGHT_SCHEDULE",
-    ))
+    if flight.scheduled_departure:
+        raw_events.append(TimelineEventItem(
+            time=flight.scheduled_departure,
+            event_type="SCHEDULED_DEPARTURE",
+            category="FLIGHT",
+            title="Scheduled Departure",
+            detail=f"Scheduled departure from {flight.origin_iata} to {flight.destination_iata}",
+            severity="INFO",
+            source="FLIGHT_SCHEDULE",
+        ))
 
     if flight.actual_departure:
+        dep_delay_str = f"delay: {flight.departure_delay_minutes} min" if flight.departure_delay_minutes is not None else "live transponder observation"
+        sev = "HIGH" if (flight.departure_delay_minutes or 0) > 45 else ("MEDIUM" if (flight.departure_delay_minutes or 0) > 15 else "LOW")
         raw_events.append(TimelineEventItem(
             time=flight.actual_departure,
             event_type="ACTUAL_DEPARTURE",
             category="FLIGHT",
             title="Actual Departure",
-            detail=f"Aircraft departed {flight.origin_iata} (delay: {flight.departure_delay_minutes} min)",
-            severity="HIGH" if flight.departure_delay_minutes > 45 else ("MEDIUM" if flight.departure_delay_minutes > 15 else "LOW"),
+            detail=f"Aircraft departed {flight.origin_iata} ({dep_delay_str})",
+            severity=sev,
             source="ACTUAL_OPERATIONS",
         ))
 

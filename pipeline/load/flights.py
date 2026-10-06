@@ -32,7 +32,7 @@ class LoadMetrics:
         }
 
 
-UPSERT_FLIGHT_SQL = """
+UPSERT_SCHEDULED_FLIGHT_SQL = """
 INSERT INTO flights (
     flight_number,
     airline_id,
@@ -64,6 +64,37 @@ DO UPDATE SET
     delay_category = COALESCE(EXCLUDED.delay_category, flights.delay_category),
     tail_number = COALESCE(EXCLUDED.tail_number, flights.tail_number),
     aircraft_type = COALESCE(EXCLUDED.aircraft_type, flights.aircraft_type),
+    distance_miles = COALESCE(EXCLUDED.distance_miles, flights.distance_miles),
+    updated_at = CURRENT_TIMESTAMP
+RETURNING (xmax = 0) AS is_inserted;
+"""
+
+UPSERT_LIVE_TELEMETRY_SQL = """
+INSERT INTO flights (
+    flight_number,
+    airline_id,
+    origin_airport_id,
+    destination_airport_id,
+    flight_date,
+    scheduled_departure,
+    actual_departure,
+    scheduled_arrival,
+    actual_arrival,
+    status,
+    departure_delay_minutes,
+    arrival_delay_minutes,
+    delay_category,
+    tail_number,
+    aircraft_type,
+    distance_miles,
+    data_source,
+    source_record_id
+)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+ON CONFLICT (tail_number, actual_departure) WHERE data_source = 'OPENSKY_LIVE' AND tail_number IS NOT NULL AND actual_departure IS NOT NULL
+DO UPDATE SET
+    actual_arrival = EXCLUDED.actual_arrival,
+    status = EXCLUDED.status,
     distance_miles = COALESCE(EXCLUDED.distance_miles, flights.distance_miles),
     updated_at = CURRENT_TIMESTAMP
 RETURNING (xmax = 0) AS is_inserted;
@@ -121,7 +152,8 @@ def load_flights_to_database(
                 flight.source_record_id,
             )
             try:
-                cur.execute(UPSERT_FLIGHT_SQL, params)
+                upsert_query = UPSERT_SCHEDULED_FLIGHT_SQL if flight.scheduled_departure is not None else UPSERT_LIVE_TELEMETRY_SQL
+                cur.execute(upsert_query, params)
                 res = cur.fetchone()
                 if res and res[0] is True:
                     metrics.inserted += 1

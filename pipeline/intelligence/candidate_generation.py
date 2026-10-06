@@ -47,9 +47,9 @@ class DelayAnalysisResult:
     airline: str
     origin: str
     destination: str
-    scheduled_departure: str
+    scheduled_departure: Optional[str]
     actual_departure: Optional[str]
-    departure_delay_minutes: int
+    departure_delay_minutes: Optional[int]
     status: str
     reported_delay_category: Optional[str]
     candidates: List[CandidateCause] = field(default_factory=list)
@@ -120,7 +120,26 @@ def generate_candidates_for_flight(bundle: FlightEvidenceBundle) -> DelayAnalysi
     sched_dep = flight.scheduled_departure
     actual_dep = flight.actual_departure
 
-    # 1. On-time handling (Delay <= 15 minutes per standard FAA criteria)
+    # 1. Telemetry-only handling: if no commercial schedule or delay is available
+    if sched_dep is None or delay_min is None:
+        return DelayAnalysisResult(
+            flight_id=flight.flight_id,
+            flight_number=flight.flight_number,
+            airline=flight.airline_name,
+            origin=flight.origin_iata,
+            destination=flight.destination_iata,
+            scheduled_departure=None,
+            actual_departure=actual_dep.isoformat() if actual_dep else None,
+            departure_delay_minutes=None,
+            status=flight.status,
+            reported_delay_category=flight.delay_category,
+            candidates=[],
+            primary_candidate="INSUFFICIENT_EVIDENCE / LIVE_TELEMETRY_ONLY",
+            is_on_time=False,
+            explanation_summary="Live ADS-B telemetry observation recorded without published commercial schedule. Timetable delay cannot be inferred without published schedule data.",
+        )
+
+    # 2. On-time handling (Delay <= 15 minutes per standard FAA criteria)
     if delay_min <= 15 and flight.status != "CANCELLED":
         return DelayAnalysisResult(
             flight_id=flight.flight_id,

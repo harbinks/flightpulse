@@ -18,8 +18,8 @@ class CandidateCauseItem(BaseModel):
 
 class DelayMetadata(BaseModel):
     """Delay statistics and upstream reported classifications."""
-    minutes: int
-    arrival_delay_minutes: int
+    minutes: Optional[int] = None
+    arrival_delay_minutes: Optional[int] = None
     reported_category: Optional[str] = None
     status: str
     is_on_time: bool

@@ -25,13 +25,13 @@ class FlightDetail:
     destination_iata: str
     destination_name: str
     flight_date: str
-    scheduled_departure: datetime
+    scheduled_departure: Optional[datetime]
     actual_departure: Optional[datetime]
-    scheduled_arrival: datetime
+    scheduled_arrival: Optional[datetime]
     actual_arrival: Optional[datetime]
     status: str
-    departure_delay_minutes: int
-    arrival_delay_minutes: int
+    departure_delay_minutes: Optional[int]
+    arrival_delay_minutes: Optional[int]
     delay_category: Optional[str]
     tail_number: Optional[str]
     aircraft_type: Optional[str]

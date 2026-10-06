@@ -98,9 +98,9 @@ CREATE TABLE IF NOT EXISTS flights (
     destination_airport_id INT NOT NULL REFERENCES airports(id) ON DELETE RESTRICT,
     
     flight_date DATE NOT NULL,
-    scheduled_departure TIMESTAMPTZ NOT NULL,
+    scheduled_departure TIMESTAMPTZ, -- Nullable for live ADS-B telemetry observations lacking published timetables
     actual_departure TIMESTAMPTZ,
-    scheduled_arrival TIMESTAMPTZ NOT NULL,
+    scheduled_arrival TIMESTAMPTZ,   -- Nullable for live ADS-B telemetry observations
     actual_arrival TIMESTAMPTZ,
 
     status VARCHAR(20) NOT NULL DEFAULT 'SCHEDULED',
@@ -267,6 +267,11 @@ CREATE INDEX IF NOT EXISTS idx_flights_delayed_dep
 CREATE INDEX IF NOT EXISTS idx_flights_source_rec 
     ON flights (data_source, source_record_id);
 
+-- Live transponder deduplication index (OPENSKY_LIVE only)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_live_flight_tail_dep
+    ON flights (tail_number, actual_departure)
+    WHERE data_source = 'OPENSKY_LIVE' AND tail_number IS NOT NULL AND actual_departure IS NOT NULL;
+
 -- Weather Observations Indexes
 CREATE INDEX IF NOT EXISTS idx_weather_airport_time 
     ON weather_observations (airport_id, observation_time DESC);
@@ -367,3 +372,18 @@ LEFT JOIN LATERAL (
     ORDER BY ABS(EXTRACT(EPOCH FROM (wo.observation_time - f.scheduled_departure))) ASC
     LIMIT 1
 ) w ON TRUE;
+
+-- ============================================================================
+-- 5. Operations Sync Audit Table
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS operations_sync_log (
+    id SERIAL PRIMARY KEY,
+    sync_source VARCHAR(50) NOT NULL,
+    sync_status VARCHAR(20) NOT NULL,
+    records_extracted INT DEFAULT 0,
+    records_inserted INT DEFAULT 0,
+    records_updated INT DEFAULT 0,
+    error_message TEXT,
+    duration_ms NUMERIC(9,2),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

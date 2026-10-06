@@ -17,9 +17,9 @@ class GroundedEvidenceContext(BaseModel):
     airline: str
     route: str
     flight_date: str
-    scheduled_departure: str
+    scheduled_departure: Optional[str] = None
     actual_departure: Optional[str] = None
-    departure_delay_minutes: int
+    departure_delay_minutes: Optional[int] = None
     status: str
     reported_delay_category: Optional[str] = None
     
@@ -57,7 +57,7 @@ class FlightAIAnalysisResponse(BaseModel):
     flight_id: int
     flight_number: str
     route: str
-    departure_delay_minutes: int
+    departure_delay_minutes: Optional[int] = None
     reported_delay_category: Optional[str] = None
     
     # Structured analytical narrative

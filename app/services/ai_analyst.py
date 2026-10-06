@@ -200,16 +200,19 @@ def generate_deterministic_fallback(
     Generate a reliable, structured fallback response when Ollama is offline or encounters an error.
     Preserves 100% of deterministic intelligence and alerts the client safely without HTTP 500.
     """
-    if context.deterministic_cause == "ON_TIME / OPERATIONAL_TOLERANCE":
-        summary = f"Flight {context.flight_number} operated within standard operational schedule with {context.departure_delay_minutes} minutes delay."
+    if "LIVE_TELEMETRY_ONLY" in context.deterministic_cause or context.departure_delay_minutes is None:
+        summary = f"Flight {context.flight_number} currently monitored via live ADS-B telemetry without published commercial schedule."
+        explanation = "This flight is an active OpenSky live telemetry observation. Scheduled departure time and delay minutes are unestablished or pending commercial schedule pairing."
+    elif context.deterministic_cause == "ON_TIME / OPERATIONAL_TOLERANCE":
+        summary = f"Flight {context.flight_number} operated within standard operational schedule with {context.departure_delay_minutes or 0} minutes delay."
         explanation = "The flight departure conformed to standard air traffic and airline scheduling tolerance with no significant adverse signals."
     elif context.deterministic_cause == "UNKNOWN / INSUFFICIENT_EVIDENCE":
-        summary = f"Flight {context.flight_number} experienced a {context.departure_delay_minutes}-minute delay with insufficient external corroborating evidence."
-        explanation = f"Although delayed by {context.departure_delay_minutes} minutes, no severe convective weather, FAA ground stops, or major hub outages matched the departure window. The carrier-reported category was '{context.reported_delay_category or 'UNREPORTED'}'."
+        summary = f"Flight {context.flight_number} experienced a {context.departure_delay_minutes or 0}-minute delay with insufficient external corroborating evidence."
+        explanation = f"Although delayed by {context.departure_delay_minutes or 0} minutes, no severe convective weather, FAA ground stops, or major hub outages matched the departure window. The carrier-reported category was '{context.reported_delay_category or 'UNREPORTED'}'."
     else:
         summary = f"Flight {context.flight_number} delay attributed to {context.deterministic_cause} ({context.deterministic_confidence} confidence)."
         explanation = (
-            f"Deterministic multi-signal correlation attributed this {context.departure_delay_minutes}-minute delay "
+            f"Deterministic multi-signal correlation attributed this {context.departure_delay_minutes or 0}-minute delay "
             f"to {context.deterministic_cause} based on {len(context.supporting_evidence)} corroborating evidence facts."
         )
 

@@ -24,13 +24,13 @@ class TransformedFlight:
     origin_airport_id: int
     destination_airport_id: int
     flight_date: str  # YYYY-MM-DD
-    scheduled_departure: datetime
+    scheduled_departure: Optional[datetime]
     actual_departure: Optional[datetime]
-    scheduled_arrival: datetime
+    scheduled_arrival: Optional[datetime]
     actual_arrival: Optional[datetime]
     status: str
-    departure_delay_minutes: int
-    arrival_delay_minutes: int
+    departure_delay_minutes: Optional[int]
+    arrival_delay_minutes: Optional[int]
     delay_category: Optional[str]
     tail_number: Optional[str]
     aircraft_type: Optional[str]
@@ -175,19 +175,20 @@ def transform_flight_records(
 
         if has_published_schedule:
             sched_dep = parse_unix_timestamp(raw_sched_dep)
+            if not sched_dep:
+                skipped_list.append({"index": idx, "reason": "INVALID_SCHEDULED_DEPARTURE_TIMESTAMP", "raw": raw})
+                continue
             sched_arr = parse_unix_timestamp(raw_sched_arr) if raw_sched_arr else sched_dep
         else:
-            # Telemetry-only live observation: OpenSky does NOT provide scheduled timetable.
-            # To satisfy the database NOT NULL constraint on scheduled_departure while never
-            # fabricating a commercial timetable or commercial delay:
-            # - We use actual_dep as the reference scheduled timestamp
-            # - departure_delay_minutes and arrival_delay_minutes are strictly 0 (no commercial delay inferred)
-            # - delay_category is strictly None
-            sched_dep = actual_dep
-            sched_arr = actual_arr or actual_dep
+            # Telemetry-only live observation: OpenSky does NOT provide commercial timetables.
+            # Represent unknown values honestly: NULL for all commercial schedule and delay attributes.
+            sched_dep = None
+            sched_arr = None
 
-        if not sched_dep:
-            skipped_list.append({"index": idx, "reason": "INVALID_SCHEDULED_DEPARTURE_TIMESTAMP", "raw": raw})
+        # Rejection check: must have at least one valid departure timestamp (scheduled or actual)
+        ref_timestamp = sched_dep or actual_dep
+        if not ref_timestamp:
+            skipped_list.append({"index": idx, "reason": "MISSING_DEPARTURE_TIMESTAMPS", "raw": raw})
             continue
 
         # 5. Classify Status & Delays
@@ -207,15 +208,15 @@ def transform_flight_records(
             else:
                 status = "SCHEDULED"
         else:
-            # Telemetry-only live flight observation
-            dep_delay = 0
-            arr_delay = 0
+            # Telemetry-only live observation: delay is unknown and must NOT be fabricated as 0
+            dep_delay = None
+            arr_delay = None
             if actual_arr is not None:
                 status = "LANDED"
             elif actual_dep is not None:
                 status = "EN_ROUTE"
             else:
-                status = "SCHEDULED"
+                status = "ACTIVE"
 
         # 6. Delay Category (Source-reported - only valid if explicitly provided by source)
         if has_published_schedule:
@@ -229,21 +230,21 @@ def transform_flight_records(
             delay_cat = None
 
         # 7. Check In-Batch Deduplication
-        # For live telemetry, key by (icao24, parsed_flight_num, actual_dep or sched_dep)
+        # For live telemetry observations, key by (airline_id, icao24, actual_dep)
         icao24 = (raw.get("icao24") or "").strip().lower()
         if not has_published_schedule and icao24:
-            unique_key = (airline_id, icao24, sched_dep)
+            unique_key = (airline_id, icao24, actual_dep)
         else:
             unique_key = (airline_id, parsed_flight_num, sched_dep)
 
         if unique_key in seen_unique_keys:
             duplicate_count += 1
-            logger.debug("Skipping in-batch duplicate flight: %s at %s", parsed_flight_num, sched_dep)
+            logger.debug("Skipping in-batch duplicate flight: %s at %s", parsed_flight_num, ref_timestamp)
             continue
         seen_unique_keys.add(unique_key)
 
-        flight_date = sched_dep.strftime("%Y-%m-%d")
-        source_rec_id = str(icao24 or raw.get("source_record_id") or f"{parsed_flight_num}-{int(sched_dep.timestamp())}")
+        flight_date = ref_timestamp.strftime("%Y-%m-%d")
+        source_rec_id = str(icao24 or raw.get("source_record_id") or f"{parsed_flight_num}-{int(ref_timestamp.timestamp())}")
 
         transformed = TransformedFlight(
             flight_number=parsed_flight_num,

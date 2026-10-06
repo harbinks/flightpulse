@@ -18,13 +18,13 @@ class FlightSummary(BaseModel):
     destination_iata: str
     destination_city: str
     flight_date: str
-    scheduled_departure: datetime
+    scheduled_departure: Optional[datetime] = None
     actual_departure: Optional[datetime] = None
-    scheduled_arrival: datetime
+    scheduled_arrival: Optional[datetime] = None
     actual_arrival: Optional[datetime] = None
     status: str
-    departure_delay_minutes: int = 0
-    arrival_delay_minutes: int = 0
+    departure_delay_minutes: Optional[int] = None
+    arrival_delay_minutes: Optional[int] = None
     delay_category: Optional[str] = None
     aircraft_type: Optional[str] = None
 
@@ -47,13 +47,13 @@ class FlightDetailResponse(BaseModel):
     destination_city: str
     destination_timezone: str
     flight_date: str
-    scheduled_departure: datetime
+    scheduled_departure: Optional[datetime] = None
     actual_departure: Optional[datetime] = None
-    scheduled_arrival: datetime
+    scheduled_arrival: Optional[datetime] = None
     actual_arrival: Optional[datetime] = None
     status: str
-    departure_delay_minutes: int = 0
-    arrival_delay_minutes: int = 0
+    departure_delay_minutes: Optional[int] = None
+    arrival_delay_minutes: Optional[int] = None
     delay_category: Optional[str] = None
     tail_number: Optional[str] = None
     aircraft_type: Optional[str] = None

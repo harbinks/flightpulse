@@ -162,15 +162,65 @@ def test_telemetry_only_no_fabricated_scheduled_or_delay(sample_airport_maps, sa
     assert report.total_transformed == 1
     t_flight = report.transformed[0]
 
+    # Verify no fabricated commercial scheduled departure or arrival
+    assert t_flight.scheduled_departure is None
+    assert t_flight.scheduled_arrival is None
+
     # Verify no fabricated commercial delay
-    assert t_flight.departure_delay_minutes == 0
-    assert t_flight.arrival_delay_minutes == 0
+    assert t_flight.departure_delay_minutes is None
+    assert t_flight.arrival_delay_minutes is None
     # Verify no fabricated carrier delay category
     assert t_flight.delay_category is None
     # Verify source provenance tag
     assert t_flight.data_source == "OPENSKY_LIVE"
     # Verify tail_number matches icao24
     assert t_flight.tail_number == "ab12cd"
+
+
+def test_telemetry_only_intelligence_evaluation():
+    """Verify intelligence candidate generation honors telemetry-only semantics."""
+    from pipeline.intelligence.evidence import FlightDetail
+    from pipeline.intelligence.candidate_generation import generate_candidates_for_flight
+
+    telemetry_detail = FlightDetail(
+        flight_id=9999,
+        flight_number="UAL415",
+        airline_id=3,
+        airline_name="United Airlines",
+        airline_iata="UA",
+        origin_airport_id=2,
+        origin_iata="ORD",
+        origin_name="Chicago O'Hare",
+        destination_airport_id=4,
+        destination_iata="DEN",
+        destination_name="Denver Intl",
+        flight_date="2024-10-04",
+        scheduled_departure=None,
+        scheduled_arrival=None,
+        actual_departure=None,
+        actual_arrival=None,
+        status="EN_ROUTE",
+        departure_delay_minutes=None,
+        arrival_delay_minutes=None,
+        delay_category=None,
+        tail_number="ab12cd",
+        aircraft_type=None,
+    )
+
+    from pipeline.intelligence.evidence import FlightEvidenceBundle
+
+    bundle = FlightEvidenceBundle(
+        flight=telemetry_detail,
+        weather_observations=[],
+        disruptions=[],
+        flight_events=[],
+    )
+
+    result = generate_candidates_for_flight(bundle)
+
+    assert result.is_on_time is False
+    assert result.primary_candidate == "INSUFFICIENT_EVIDENCE / LIVE_TELEMETRY_ONLY"
+    assert result.candidates == []
 
 
 def test_operations_sync_log_recorded():
