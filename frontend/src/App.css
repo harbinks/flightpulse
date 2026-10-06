@@ -410,18 +410,13 @@
 }
 
 .fp-flight-strip.is-selected {
-  background-color: #FFFDF9;
+  background-color: #FAF8F4;
+  border-left: 2px solid var(--accent-amber);
 }
 
 .fp-strip-indicator {
-  width: 4px;
-  background-color: transparent;
-  flex-shrink: 0;
-  transition: background-color 0.15s ease;
-}
-
-.fp-flight-strip.is-selected .fp-strip-indicator {
-  background-color: var(--accent-amber);
+  width: 0;
+  display: none;
 }
 
 .fp-strip-main {

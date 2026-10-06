@@ -1,52 +1,52 @@
 /* FlightPulse Design Token System - Aviation Operations & Intelligence */
 
 :root {
-  /* Surfaces & Paper Tones */
-  --surface-canvas: #F4F1EA;
-  --surface-panel: #EAE6DC;
-  --surface-panel-alt: #E2DDD2;
-  --surface-card: #FFFFFF;
-  --surface-card-subtle: #F9F8F5;
-  --surface-inset: #DFD9CC;
+  /* Final Primary Palette: Part B Design System */
+  --surface-canvas: #F7F5F0;       /* Linen Cream (Page Background) */
+  --surface-panel: #F7F5F0;        /* Linen Cream (Sidebar & Nav Ribbons) */
+  --surface-panel-alt: #EFECE4;    /* Light Linen Tint (Roster Header / Sub-bars) */
+  --surface-card: #FFFFFF;         /* Pure Alabaster (Major Content Surfaces) */
+  --surface-card-subtle: #FAF9F6;  /* Ultra Subtle Alabaster Tint */
+  --surface-inset: #EBE7DD;        /* Inset Recessed Surface */
 
-  /* Borders & Grid Rules */
-  --border-subtle: #DCD6C9;
-  --border-medium: #C8C1B0;
-  --border-strong: #A8A08E;
-  --border-technical: #171A19;
+  /* Borders & Dividers */
+  --border-subtle: #E3DFD5;        /* Light Putty (Subtle 1px Borders & Dividers) */
+  --border-medium: #E3DFD5;        /* Light Putty (Standard Panel Rule) */
+  --border-strong: #CEC7B9;        /* Medium Putty (Accent Border) */
+  --border-technical: #11161B;     /* Inkwell Charcoal (Crisp Technical Rule) */
 
   /* Typography */
-  --text-primary: #171A19;
-  --text-secondary: #535754;
-  --text-muted: #7E837F;
-  --text-faint: #A5ABA6;
-  --text-inverse: #F4F1EA;
+  --text-primary: #11161B;         /* Inkwell Charcoal (Headings, Flight Numbers, Key Values) */
+  --text-secondary: #5C646E;       /* Muted Slate (Metadata, Descriptions, Timestamps) */
+  --text-muted: #5C646E;           /* Muted Slate */
+  --text-faint: #8E96A0;           /* Restrained Slate Tint */
+  --text-inverse: #F7F5F0;         /* Linen Cream Inverse */
 
-  /* Aviation Distinctive Accents */
-  --accent-amber: #E85D2A;
-  --accent-amber-hover: #CF4E1D;
-  --accent-amber-tint: #FBEFE9;
-  --accent-yellow: #D7A928;
-  --accent-yellow-tint: #FBF6E8;
+  /* Scarcely Used Accent / Action */
+  --accent-amber: #C2593F;         /* Deep Terracotta (Primary Action & Critical Selected States) */
+  --accent-amber-hover: #AB4B33;   /* Deep Terracotta Hover */
+  --accent-amber-tint: #F8EFEA;    /* Very Soft Terracotta Wash */
+  --accent-yellow: #B88225;        /* Subdued Muted Ochre */
+  --accent-yellow-tint: #FAF5E8;   /* Soft Ochre Tint */
 
-  /* Restrained Operational Status Semantics */
-  --status-delay: #C53B27;
-  --status-delay-bg: #FAEBE8;
-  --status-weather: #3F647D;
-  --status-weather-bg: #EDF3F7;
-  --status-atc: #263038;
-  --status-atc-bg: #EAECEE;
-  --status-ontime: #2E7D4F;
-  --status-ontime-bg: #EBF4EE;
+  /* Operational Status Semantics */
+  --status-delay: #C2593F;         /* Deep Terracotta (Critical Delay) */
+  --status-delay-bg: #F8EFEA;      /* Soft Terracotta Tint */
+  --status-weather: #455A64;       /* Slate Grey (Atmospheric Telemetry) */
+  --status-weather-bg: #ECEFF1;    /* Very Light Slate Tint */
+  --status-atc: #11161B;           /* Inkwell Charcoal (FAA Advisories) */
+  --status-atc-bg: #EFECE4;        /* Soft Putty/Linen Tint */
+  --status-ontime: #2D5A38;        /* Forest Pine on Sage */
+  --status-ontime-bg: #E2E9E1;     /* Sage Leaf (Healthy / On-Time State) */
 
   /* Typography Stacks */
   --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
 
-  /* Shadows (Subtle, tactile, non-neon) */
-  --shadow-sm: 0 1px 2px rgba(23, 26, 25, 0.05);
-  --shadow-md: 0 2px 6px rgba(23, 26, 25, 0.08);
-  --shadow-panel: 0 1px 3px rgba(23, 26, 25, 0.06), 0 6px 16px rgba(23, 26, 25, 0.04);
+  /* Restrained Shadows (Crisp, thin 1px border preference) */
+  --shadow-sm: 0 1px 2px rgba(17, 22, 27, 0.03);
+  --shadow-md: 0 2px 4px rgba(17, 22, 27, 0.04);
+  --shadow-panel: 0 1px 3px rgba(17, 22, 27, 0.04);
 }
 
 * {

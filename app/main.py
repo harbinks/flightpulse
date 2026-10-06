@@ -52,6 +52,26 @@ app.include_router(intelligence_router)
 app.include_router(timeline_router)
 app.include_router(ai_router)
 
+from fastapi import Request
+from fastapi.responses import JSONResponse
+import psycopg2
+
+@app.exception_handler(psycopg2.Error)
+async def postgresql_exception_handler(request: Request, exc: psycopg2.Error):
+    logging.getLogger("flightpulse.api").error("Database error processing request %s: %s", request.url.path, exc)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Operational database service temporarily unavailable. Please retry shortly."},
+    )
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    logging.getLogger("flightpulse.api").error("Unhandled exception processing request %s: %s", request.url.path, exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal operational error occurred processing the flight request."},
+    )
+
 # Mount built React/Vite dashboard if available
 dist_dir = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 if dist_dir.exists():
