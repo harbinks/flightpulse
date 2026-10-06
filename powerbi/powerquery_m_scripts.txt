@@ -1,0 +1,210 @@
+// ===============================================================================
+// FlightPulse Power BI - Power Query (M) Table Import Scripts
+// PostgreSQL Connection: localhost:5432 / Database: flightpulse
+// ===============================================================================
+
+// -------------------------------------------------------------------------------
+// 1. DimAirline (Dimension: Airline Operators)
+// -------------------------------------------------------------------------------
+let
+    Source = PostgreSQL.Database("localhost:5432", "flightpulse"),
+    public_vw_powerbi_dim_airlines = Source{[Schema="public",Item="vw_powerbi_dim_airlines"]}[Data],
+    #"Changed Type" = Table.TransformColumnTypes(public_vw_powerbi_dim_airlines,{
+        {"airline_id", Int64.Type},
+        {"iata_code", type text},
+        {"icao_code", type text},
+        {"airline_name", type text},
+        {"callsign", type text},
+        {"country", type text},
+        {"active", type logical}
+    })
+in
+    #"Changed Type"
+
+
+// -------------------------------------------------------------------------------
+// 2. DimAirport (Dimension: Worldwide Airports - Role-Playing Origin/Destination)
+// -------------------------------------------------------------------------------
+let
+    Source = PostgreSQL.Database("localhost:5432", "flightpulse"),
+    public_vw_powerbi_dim_airports = Source{[Schema="public",Item="vw_powerbi_dim_airports"]}[Data],
+    #"Changed Type" = Table.TransformColumnTypes(public_vw_powerbi_dim_airports,{
+        {"airport_id", Int64.Type},
+        {"iata_code", type text},
+        {"icao_code", type text},
+        {"airport_name", type text},
+        {"city", type text},
+        {"state", type text},
+        {"country", type text},
+        {"latitude", type number},
+        {"longitude", type number},
+        {"elevation_ft", Int64.Type},
+        {"timezone", type text},
+        {"location_display", type text}
+    })
+in
+    #"Changed Type"
+
+
+// -------------------------------------------------------------------------------
+// 3. DimDate (Dimension: Standard Calendar Dimension)
+// -------------------------------------------------------------------------------
+let
+    Source = PostgreSQL.Database("localhost:5432", "flightpulse"),
+    public_vw_powerbi_dim_date = Source{[Schema="public",Item="vw_powerbi_dim_date"]}[Data],
+    #"Changed Type" = Table.TransformColumnTypes(public_vw_powerbi_dim_date,{
+        {"date_key", type date},
+        {"year", Int64.Type},
+        {"quarter", type text},
+        {"month_num", Int64.Type},
+        {"month_name", type text},
+        {"year_month", type text},
+        {"day_of_month", Int64.Type},
+        {"day_of_week_short", type text},
+        {"day_of_week_num", Int64.Type},
+        {"is_weekend", type logical}
+    })
+in
+    #"Changed Type"
+
+
+// -------------------------------------------------------------------------------
+// 4. FactFlights (Central Fact: Flight Schedules, Actuals, Delays & Attribution)
+// -------------------------------------------------------------------------------
+let
+    Source = PostgreSQL.Database("localhost:5432", "flightpulse"),
+    public_vw_powerbi_fact_flights = Source{[Schema="public",Item="vw_powerbi_fact_flights"]}[Data],
+    #"Changed Type" = Table.TransformColumnTypes(public_vw_powerbi_fact_flights,{
+        {"flight_id", Int64.Type},
+        {"flight_number", type text},
+        {"airline_id", Int64.Type},
+        {"origin_airport_id", Int64.Type},
+        {"destination_airport_id", Int64.Type},
+        {"flight_date", type date},
+        {"scheduled_departure", type datetimezone},
+        {"actual_departure", type datetimezone},
+        {"scheduled_arrival", type datetimezone},
+        {"actual_arrival", type datetimezone},
+        {"status", type text},
+        {"departure_delay_minutes", Int64.Type},
+        {"arrival_delay_minutes", Int64.Type},
+        {"reported_delay_category", type text},
+        {"departure_delay_bracket", type text},
+        {"is_operated", Int64.Type},
+        {"is_cancelled", Int64.Type},
+        {"is_delayed_15", Int64.Type},
+        {"is_delayed_60", Int64.Type},
+        {"distance_miles", type number},
+        {"aircraft_type", type text},
+        {"tail_number", type text},
+        {"primary_candidate_cause", type text},
+        {"confidence_level", type text},
+        {"confidence_score", type number},
+        {"primary_signal", type text},
+        {"explanation_summary", type text},
+        {"supporting_evidence_count", Int64.Type},
+        {"all_evidence_summary", type text}
+    })
+in
+    #"Changed Type"
+
+
+// -------------------------------------------------------------------------------
+// 5. FactFlightIntelligence (Analytical Fact: Detailed Deterministic Attribution)
+// -------------------------------------------------------------------------------
+let
+    Source = PostgreSQL.Database("localhost:5432", "flightpulse"),
+    public_vw_powerbi_fact_intelligence = Source{[Schema="public",Item="vw_powerbi_fact_intelligence"]}[Data],
+    #"Changed Type" = Table.TransformColumnTypes(public_vw_powerbi_fact_intelligence,{
+        {"flight_id", Int64.Type},
+        {"flight_number", type text},
+        {"primary_candidate_cause", type text},
+        {"confidence_level", type text},
+        {"confidence_score", type number},
+        {"primary_signal", type text},
+        {"reported_delay_category", type text},
+        {"is_on_time", type logical},
+        {"explanation_summary", type text},
+        {"supporting_evidence_count", Int64.Type},
+        {"weather_evidence", type text},
+        {"disruption_evidence", type text},
+        {"flight_event_evidence", type text},
+        {"all_evidence_summary", type text},
+        {"evaluated_at", type datetimezone}
+    })
+in
+    #"Changed Type"
+
+
+// -------------------------------------------------------------------------------
+// 6. FactWeather (Supporting Fact: Airport Meteorological Observations)
+// -------------------------------------------------------------------------------
+let
+    Source = PostgreSQL.Database("localhost:5432", "flightpulse"),
+    public_vw_powerbi_fact_weather = Source{[Schema="public",Item="vw_powerbi_fact_weather"]}[Data],
+    #"Changed Type" = Table.TransformColumnTypes(public_vw_powerbi_fact_weather,{
+        {"observation_id", Int64.Type},
+        {"airport_id", Int64.Type},
+        {"observation_time", type datetimezone},
+        {"observation_date", type date},
+        {"temperature_c", type number},
+        {"dewpoint_c", type number},
+        {"wind_speed_knots", type number},
+        {"wind_gust_knots", type number},
+        {"wind_direction_deg", Int64.Type},
+        {"visibility_miles", type number},
+        {"altimeter_inhg", type number},
+        {"condition_code", type text},
+        {"raw_metar", type text},
+        {"is_thunderstorm", Int64.Type},
+        {"is_fog", Int64.Type},
+        {"is_high_wind", Int64.Type},
+        {"is_low_visibility", Int64.Type}
+    })
+in
+    #"Changed Type"
+
+
+// -------------------------------------------------------------------------------
+// 7. FactDisruptions (Supporting Fact: FAA Ground Stops & Airspace Notices)
+// -------------------------------------------------------------------------------
+let
+    Source = PostgreSQL.Database("localhost:5432", "flightpulse"),
+    public_vw_powerbi_fact_disruptions = Source{[Schema="public",Item="vw_powerbi_fact_disruptions"]}[Data],
+    #"Changed Type" = Table.TransformColumnTypes(public_vw_powerbi_fact_disruptions,{
+        {"disruption_id", Int64.Type},
+        {"event_type", type text},
+        {"severity", type text},
+        {"title", type text},
+        {"description", type text},
+        {"airport_id", Int64.Type},
+        {"airline_id", Int64.Type},
+        {"start_time", type datetimezone},
+        {"end_time", type datetimezone},
+        {"disruption_date", type date},
+        {"duration_minutes", type number},
+        {"data_source", type text}
+    })
+in
+    #"Changed Type"
+
+
+// -------------------------------------------------------------------------------
+// 8. FactTimelineUnified (Supporting Fact: Step-by-Step Chronological Progression)
+// -------------------------------------------------------------------------------
+let
+    Source = PostgreSQL.Database("localhost:5432", "flightpulse"),
+    public_vw_powerbi_fact_timeline_unified = Source{[Schema="public",Item="vw_powerbi_fact_timeline_unified"]}[Data],
+    #"Changed Type" = Table.TransformColumnTypes(public_vw_powerbi_fact_timeline_unified,{
+        {"flight_id", Int64.Type},
+        {"flight_number", type text},
+        {"event_time", type datetimezone},
+        {"category", type text},
+        {"event_type", type text},
+        {"title", type text},
+        {"detail", type text},
+        {"severity", type text},
+        {"source", type text}
+    })
+in
+    #"Changed Type"
