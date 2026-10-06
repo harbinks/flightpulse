@@ -21,6 +21,7 @@ def list_flights(
     destination: Optional[str] = Query(None, description="Destination airport code (e.g. DEN)"),
     date: Optional[str] = Query(None, description="Flight date in YYYY-MM-DD format"),
     delay_status: Optional[str] = Query(None, description="Filter: DELAYED, ON_TIME, CANCELLED, LANDED"),
+    mode: str = Query("demo", description="Data provenance mode: 'demo' (default) or 'live'"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     conn: connection = Depends(get_db),
@@ -34,6 +35,7 @@ def list_flights(
         destination=destination,
         date=date,
         delay_status=delay_status,
+        mode=mode,
         limit=limit,
         offset=offset,
     )

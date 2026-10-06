@@ -66,6 +66,7 @@ DO UPDATE SET
     aircraft_type = COALESCE(EXCLUDED.aircraft_type, flights.aircraft_type),
     distance_miles = COALESCE(EXCLUDED.distance_miles, flights.distance_miles),
     updated_at = CURRENT_TIMESTAMP
+WHERE flights.data_source = EXCLUDED.data_source OR flights.data_source IN ('DEMO', 'FIXTURE', 'FIXTURE_REPLAY')
 RETURNING (xmax = 0) AS is_inserted;
 """
 
@@ -152,7 +153,10 @@ def load_flights_to_database(
                 flight.source_record_id,
             )
             try:
-                upsert_query = UPSERT_SCHEDULED_FLIGHT_SQL if flight.scheduled_departure is not None else UPSERT_LIVE_TELEMETRY_SQL
+                if flight.data_source == "OPENSKY_LIVE" or flight.scheduled_departure is None:
+                    upsert_query = UPSERT_LIVE_TELEMETRY_SQL
+                else:
+                    upsert_query = UPSERT_SCHEDULED_FLIGHT_SQL
                 cur.execute(upsert_query, params)
                 res = cur.fetchone()
                 if res and res[0] is True:

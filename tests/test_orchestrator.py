@@ -241,3 +241,174 @@ def test_operations_sync_log_recorded():
         assert count_after >= count_before + 3
     finally:
         conn.close()
+
+
+def test_live_upsert_cannot_overwrite_demo_row():
+    """Verify live telemetry cannot overwrite or mutate an existing DEMO/fixture flight."""
+    from datetime import datetime, timezone
+    from pipeline.database import get_db_connection
+    from pipeline.load.flights import load_flights_to_database
+    from pipeline.transform.flights import TransformedFlight
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # Query existing UA415 demo row
+            cur.execute("SELECT flight_number, airline_id, scheduled_departure, departure_delay_minutes FROM flights WHERE id = 2;")
+            ua_row = cur.fetchone()
+            assert ua_row is not None
+            sched_dep = ua_row[2]
+
+        # Construct a live telemetry record attempting to collide with UA415
+        live_telemetry = TransformedFlight(
+            flight_number="UA415",
+            airline_id=3,
+            origin_airport_id=2,
+            destination_airport_id=4,
+            flight_date="2026-10-04",
+            scheduled_departure=None,  # Live telemetry has NULL schedule
+            actual_departure=datetime(2026, 10, 4, 21, 45, tzinfo=timezone.utc),
+            scheduled_arrival=None,
+            actual_arrival=None,
+            status="EN_ROUTE",
+            departure_delay_minutes=None,
+            arrival_delay_minutes=None,
+            delay_category=None,
+            tail_number="TEST_TAIL_999",
+            aircraft_type="B738",
+            distance_miles=900.0,
+            data_source="OPENSKY_LIVE",
+            source_record_id="test_live_coll_1",
+        )
+
+        load_flights_to_database(conn, [live_telemetry], dry_run=False)
+
+        # Verify UA415 remains 100% untouched
+        with conn.cursor() as cur:
+            cur.execute("SELECT flight_number, data_source, scheduled_departure, departure_delay_minutes FROM flights WHERE id = 2;")
+            after_row = cur.fetchone()
+            assert after_row[0] == "UA415"
+            assert after_row[1] == "FLIGHTAWARE"
+            assert after_row[2] == sched_dep
+            assert after_row[3] == 105
+
+            # Cleanup test record
+            cur.execute("DELETE FROM flights WHERE tail_number = 'TEST_TAIL_999' AND data_source = 'OPENSKY_LIVE';")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_live_telemetry_idempotence_and_two_observations():
+    """Verify live telemetry re-ingestion is idempotent and distinct observations for same aircraft are preserved."""
+    from datetime import datetime, timezone
+    from pipeline.database import get_db_connection
+    from pipeline.load.flights import load_flights_to_database
+    from pipeline.transform.flights import TransformedFlight
+
+    conn = get_db_connection()
+    try:
+        t1 = datetime(2026, 10, 5, 10, 0, tzinfo=timezone.utc)
+        t2 = datetime(2026, 10, 5, 14, 0, tzinfo=timezone.utc)
+
+        obs1 = TransformedFlight(
+            flight_number="UA101",
+            airline_id=3,
+            origin_airport_id=2,
+            destination_airport_id=4,
+            flight_date="2026-10-05",
+            scheduled_departure=None,
+            actual_departure=t1,
+            scheduled_arrival=None,
+            actual_arrival=None,
+            status="EN_ROUTE",
+            departure_delay_minutes=None,
+            arrival_delay_minutes=None,
+            delay_category=None,
+            tail_number="NTEST01",
+            aircraft_type="A320",
+            distance_miles=None,
+            data_source="OPENSKY_LIVE",
+            source_record_id="test_obs_1",
+        )
+
+        # 1. First insert
+        m1 = load_flights_to_database(conn, [obs1], dry_run=False)
+        assert m1.inserted == 1
+
+        # 2. Re-insert same record (idempotency -> updated/no-op, 0 errors)
+        m2 = load_flights_to_database(conn, [obs1], dry_run=False)
+        assert m2.updated == 1
+        assert m2.errors == 0
+
+        # 3. Second distinct observation for same aircraft at different departure time
+        obs2 = TransformedFlight(
+            flight_number="UA102",
+            airline_id=3,
+            origin_airport_id=4,
+            destination_airport_id=2,
+            flight_date="2026-10-05",
+            scheduled_departure=None,
+            actual_departure=t2,
+            scheduled_arrival=None,
+            actual_arrival=None,
+            status="EN_ROUTE",
+            departure_delay_minutes=None,
+            arrival_delay_minutes=None,
+            delay_category=None,
+            tail_number="NTEST01",
+            aircraft_type="A320",
+            distance_miles=None,
+            data_source="OPENSKY_LIVE",
+            source_record_id="test_obs_2",
+        )
+        m3 = load_flights_to_database(conn, [obs2], dry_run=False)
+        assert m3.inserted == 1
+
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM flights WHERE tail_number = 'NTEST01' AND data_source = 'OPENSKY_LIVE';")
+            count = cur.fetchone()[0]
+            assert count == 2
+
+            # Cleanup
+            cur.execute("DELETE FROM flights WHERE tail_number = 'NTEST01' AND data_source = 'OPENSKY_LIVE';")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_weather_and_faa_live_provenance():
+    """Verify live branches produce OPENMETEO_LIVE and FAA_LIVE data_source values."""
+    from pipeline.transform.weather import transform_weather_records
+    from pipeline.transform.news import transform_news_records
+
+    # Weather transformation
+    wx_raw = [{
+        "airport_code": "KORD",
+        "time": "2024-10-04T16:15:00Z",
+        "temperature_c": 18.5,
+        "dewpoint_c": 10.0,
+        "wind_speed_knots": 12.0,
+        "wind_gust_knots": 18.0,
+        "wind_direction_deg": 270,
+        "visibility_miles": 10.0,
+        "weather_code": 3,
+    }]
+    coords = {"KORD": {"id": 2, "latitude": 41.97, "longitude": -87.90}}
+    wx_rep = transform_weather_records(wx_raw, coords, data_source="OPENMETEO_LIVE")
+    assert wx_rep.total_transformed == 1
+    assert wx_rep.transformed[0].data_source == "OPENMETEO_LIVE"
+
+    # FAA disruption transformation
+    faa_raw = [{
+        "title": "Ground Stop ORD",
+        "detail": "Advisory for ORD",
+        "airport_code": "ORD",
+        "raw_type": "Ground Stop",
+        "severity": "HIGH",
+        "start_time": "2024-10-04T16:00:00Z",
+    }]
+    news_rep = transform_news_records(faa_raw, {"ORD": 2}, {}, data_source="FAA_LIVE")
+    assert news_rep.total_transformed == 1
+    assert news_rep.transformed[0].data_source == "FAA_LIVE"
+

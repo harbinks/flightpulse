@@ -275,3 +275,38 @@ def test_api_error_handling_invalid_inputs():
     timeline_404 = client.get("/flights/99999/timeline")
     assert timeline_404.status_code == 404
     assert "not found" in timeline_404.json()["detail"].lower()
+
+
+# ============================================================================
+# 11. Mode Provenance and DEMO/LIVE Isolation (Phase 10.2)
+# ============================================================================
+
+def test_list_flights_default_is_demo():
+    """Verify default GET /flights only returns DEMO/FIXTURE records."""
+    response = client.get("/flights")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] > 0
+    for flight in data["flights"]:
+        assert flight.get("data_source") in ("DEMO", "FIXTURE", "FIXTURE_REPLAY", "FLIGHTAWARE")
+
+
+def test_list_flights_explicit_demo_mode():
+    """Verify GET /flights?mode=demo explicitly filters to DEMO records."""
+    response = client.get("/flights?mode=demo")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] > 0
+    for flight in data["flights"]:
+        assert flight.get("data_source") != "OPENSKY_LIVE"
+
+
+def test_list_flights_live_mode_excludes_demo():
+    """Verify GET /flights?mode=live excludes all DEMO/FIXTURE records."""
+    response = client.get("/flights?mode=live")
+    assert response.status_code == 200
+    data = response.json()
+    for flight in data["flights"]:
+        assert flight.get("data_source") == "OPENSKY_LIVE"
+        assert flight.get("data_source") not in ("DEMO", "FIXTURE", "FIXTURE_REPLAY", "FLIGHTAWARE")
+

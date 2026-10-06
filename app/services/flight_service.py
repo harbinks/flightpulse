@@ -18,14 +18,25 @@ def search_flights(
     destination: Optional[str] = None,
     date: Optional[str] = None,
     delay_status: Optional[str] = None,
+    mode: str = "demo",
     limit: int = 50,
     offset: int = 0,
 ) -> FlightListResponse:
     """
-    Search and filter flights with optional parameters.
+    Search and filter flights with optional parameters and DEMO/LIVE mode isolation.
+    - mode="demo" (default): data_source IN ('DEMO', 'FIXTURE', 'FIXTURE_REPLAY', 'FLIGHTAWARE')
+    - mode="live": data_source = 'OPENSKY_LIVE'
+    - mode="all": no data_source restriction
     """
     conditions = []
     params: List[Any] = []
+
+    clean_mode = (mode or "demo").strip().lower()
+    if clean_mode == "live":
+        conditions.append("f.data_source = 'OPENSKY_LIVE'")
+    elif clean_mode == "demo":
+        conditions.append("(f.data_source IS NULL OR f.data_source IN ('DEMO', 'FIXTURE', 'FIXTURE_REPLAY', 'FLIGHTAWARE'))")
+    # if clean_mode == "all", no data_source condition added
 
     if airline:
         conditions.append("(al.iata_code = %s OR al.icao_code = %s OR al.name ILIKE %s)")
@@ -71,6 +82,14 @@ def search_flights(
         {where_clause};
     """
 
+    # For DEMO mode, order by flight_date DESC, scheduled_departure DESC
+    # For LIVE mode (where scheduled_departure is NULL), order by actual_departure DESC NULLS LAST
+    order_clause = (
+        "ORDER BY f.actual_departure DESC NULLS LAST, f.flight_date DESC"
+        if clean_mode == "live"
+        else "ORDER BY f.flight_date DESC, f.scheduled_departure DESC NULLS LAST"
+    )
+
     select_sql = f"""
         SELECT 
             f.id, f.flight_number, al.name AS airline_name, al.iata_code AS airline_iata,
@@ -79,13 +98,13 @@ def search_flights(
             f.flight_date::text, f.scheduled_departure, f.actual_departure,
             f.scheduled_arrival, f.actual_arrival, f.status,
             f.departure_delay_minutes, f.arrival_delay_minutes, f.delay_category,
-            f.aircraft_type
+            f.aircraft_type, f.data_source
         FROM flights f
         JOIN airlines al ON f.airline_id = al.id
         JOIN airports orig ON f.origin_airport_id = orig.id
         JOIN airports dest ON f.destination_airport_id = dest.id
         {where_clause}
-        ORDER BY f.flight_date DESC, f.scheduled_departure DESC
+        {order_clause}
         LIMIT %s OFFSET %s;
     """
 
@@ -117,6 +136,7 @@ def search_flights(
             arrival_delay_minutes=r[15],
             delay_category=r[16],
             aircraft_type=r[17],
+            data_source=r[18],
         )
         for r in rows
     ]

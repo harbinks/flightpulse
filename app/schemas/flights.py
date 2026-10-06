@@ -27,6 +27,7 @@ class FlightSummary(BaseModel):
     arrival_delay_minutes: Optional[int] = None
     delay_category: Optional[str] = None
     aircraft_type: Optional[str] = None
+    data_source: Optional[str] = None
 
 
 class FlightDetailResponse(BaseModel):
