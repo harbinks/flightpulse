@@ -124,6 +124,7 @@ class OllamaClient:
             "options": {
                 "temperature": 0.1,  # Low temperature for deterministic adherence to evidence
                 "top_p": 0.9,
+                "num_ctx": 2048,
             },
         }
 
@@ -159,7 +160,25 @@ class OllamaClient:
             raise OllamaConnectionError(f"Ollama service unreachable at {self.base_url}") from exc
 
         except httpx.TimeoutException as exc:
-            logger.warning("Ollama generation timed out after %.1fs: %s", self.timeout, exc)
+            logger.warning("Ollama generation with '%s' timed out after %.1fs", target_model, self.timeout)
+            # Fast GPU fallback: if llama3 timed out, attempt lightweight tinyllama if installed
+            if target_model != "tinyllama:latest":
+                try:
+                    installed = self.get_installed_models()
+                    if "tinyllama:latest" in installed:
+                        logger.info("Attempting fast GPU completion with 'tinyllama:latest' (30s timeout)...")
+                        payload["model"] = "tinyllama:latest"
+                        with httpx.Client(timeout=30.0) as client:
+                            fb_resp = client.post(url, json=payload)
+                        if fb_resp.status_code == 200:
+                            fb_data = fb_resp.json()
+                            fb_text = fb_data.get("response", "").strip()
+                            if fb_text:
+                                self.model = "tinyllama:latest"
+                                return fb_text
+                except Exception as fb_err:
+                    logger.warning("Fast fallback to tinyllama failed: %s", fb_err)
+
             raise OllamaTimeoutError(f"Ollama request timed out after {self.timeout}s") from exc
 
         except httpx.HTTPError as exc:

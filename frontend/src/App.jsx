@@ -49,6 +49,7 @@ export default function App() {
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
+  const [aiCache, setAiCache] = useState({});
   const aiAbortControllerRef = useRef(null);
 
   // View Navigation inside Workspace
@@ -157,38 +158,46 @@ export default function App() {
           setDetailLoading(false);
         }
 
-        // 4. Fetch Grounded AI Analysis asynchronously so deterministic data renders immediately
+        // 4. Check client-side AI cache or fetch Grounded AI Analysis asynchronously
         if (isMounted) {
-          setAiLoading(true);
-          setAiError(null);
-          try {
-            const aiData = await fetchFlightAiAnalysis(selectedFlightId, abortController.signal);
-            if (isMounted) {
-              setAiAnalysis(aiData);
-            }
-          } catch (aiErr) {
-            if (aiErr.name !== 'AbortError' && isMounted) {
-              console.warn('AI analysis load failed; using fallback:', aiErr);
-              setAiError(aiErr.message);
-              // Construct seamless client fallback
-              setAiAnalysis({
-                status: 'unavailable',
-                flight_id: selectedFlightId,
-                analysis: {
-                  summary: intelData?.explanation_summary || 'Deterministic FlightPulse analysis active.',
-                  primary_cause: intelData?.primary_candidate?.category || 'UNKNOWN',
-                  confidence: intelData?.primary_candidate?.confidence || 'INSUFFICIENT',
-                  explanation: intelData?.explanation_summary || '',
-                  evidence_used: intelData?.candidates?.[0]?.evidence || [],
-                  limitations: ['Local AI analyst service offline; displaying deterministic engine findings.'],
-                },
-                model_used: null,
-                execution_time_ms: 0,
-              });
-            }
-          } finally {
-            if (isMounted) {
-              setAiLoading(false);
+          if (aiCache[selectedFlightId]) {
+            setAiAnalysis(aiCache[selectedFlightId]);
+            setAiLoading(false);
+          } else {
+            setAiLoading(true);
+            setAiError(null);
+            try {
+              const aiData = await fetchFlightAiAnalysis(selectedFlightId, abortController.signal);
+              if (isMounted) {
+                setAiAnalysis(aiData);
+                if (aiData && aiData.status === 'success') {
+                  setAiCache((prev) => ({ ...prev, [selectedFlightId]: aiData }));
+                }
+              }
+            } catch (aiErr) {
+              if (aiErr.name !== 'AbortError' && isMounted) {
+                console.warn('AI analysis load failed; using fallback:', aiErr);
+                setAiError(aiErr.message);
+                // Construct seamless client fallback
+                setAiAnalysis({
+                  status: 'unavailable',
+                  flight_id: selectedFlightId,
+                  analysis: {
+                    summary: intelData?.explanation_summary || 'Deterministic FlightPulse analysis active.',
+                    primary_cause: intelData?.primary_candidate?.category || 'UNKNOWN',
+                    confidence: intelData?.primary_candidate?.confidence || 'INSUFFICIENT',
+                    explanation: intelData?.explanation_summary || '',
+                    evidence_used: intelData?.candidates?.[0]?.evidence || [],
+                    limitations: ['Local AI analyst service offline; displaying deterministic engine findings.'],
+                  },
+                  model_used: null,
+                  execution_time_ms: 0,
+                });
+              }
+            } finally {
+              if (isMounted) {
+                setAiLoading(false);
+              }
             }
           }
         }
@@ -276,9 +285,20 @@ export default function App() {
                 onRetry={() => {
                   if (selectedFlightId) {
                     setAiLoading(true);
+                    setAiError(null);
+                    setAiCache((prev) => {
+                      const copy = { ...prev };
+                      delete copy[selectedFlightId];
+                      return copy;
+                    });
                     fetchFlightAiAnalysis(selectedFlightId)
-                      .then((d) => setAiAnalysis(d))
-                      .catch(() => {})
+                      .then((d) => {
+                        setAiAnalysis(d);
+                        if (d && d.status === 'success') {
+                          setAiCache((prev) => ({ ...prev, [selectedFlightId]: d }));
+                        }
+                      })
+                      .catch((err) => setAiError(err.message))
                       .finally(() => setAiLoading(false));
                   }
                 }}

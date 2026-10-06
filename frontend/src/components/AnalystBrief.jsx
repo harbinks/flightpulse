@@ -27,10 +27,10 @@ export default function AnalystBrief({
             <div className="fp-loading-bar-fill"></div>
           </div>
           <div className="fp-loading-text mono">
-            SYNTHESIZING OPERATIONAL EVIDENCE & ATM TELEMETRY...
+            SYNTHESIZING GROUNDED DOSSIER WITH LOCAL LLM...
           </div>
-          <div className="fp-loading-subtext">
-            Compiling METAR records, FAA NAS advisories, and carrier claims into grounded dossier.
+          <div className="fp-loading-subtext mono">
+            Local Ollama model running on CPU/GPU. Synthesizing METAR telemetry, FAA notices, and schedule delta.
           </div>
         </div>
       </div>
@@ -78,12 +78,34 @@ export default function AnalystBrief({
               {latencyMs && (
                 <span className="fp-telemetry-chip latency-chip">{latencyMs}</span>
               )}
+              {onRetry && (
+                <button
+                  type="button"
+                  className="fp-telemetry-chip mono"
+                  style={{ cursor: 'pointer', background: 'var(--surface-panel)' }}
+                  onClick={onRetry}
+                  title="Re-run Grounded Synthesis"
+                >
+                  RE-ANALYZE
+                </button>
+              )}
             </div>
           ) : (
             <div className="fp-fallback-telemetry">
               <span className="fp-telemetry-chip offline-chip">
                 ANALYST OFFLINE / DETERMINISTIC FALLBACK
               </span>
+              {onRetry && (
+                <button
+                  type="button"
+                  className="fp-telemetry-chip mono"
+                  style={{ cursor: 'pointer', background: 'var(--surface-panel)' }}
+                  onClick={onRetry}
+                  title="Retry Local Ollama"
+                >
+                  RETRY
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -256,20 +256,74 @@ def generate_deterministic_fallback(
     )
 
 
+import threading
+
+_CACHE_LOCK = threading.Lock()
+_ANALYSIS_CACHE: Dict[int, FlightAIAnalysisResponse] = {}
+_IN_PROGRESS_LOCKS: Dict[int, threading.Lock] = {}
+
+
+def clear_ai_cache() -> None:
+    """Clear cached AI analyses (useful for testing or manual refreshes)."""
+    with _CACHE_LOCK:
+        _ANALYSIS_CACHE.clear()
+        _IN_PROGRESS_LOCKS.clear()
+
+
 def analyze_flight_with_ai(
     conn: connection,
     flight_id: int,
     client: Optional[OllamaClient] = None,
+    use_cache: bool = True,
 ) -> Optional[FlightAIAnalysisResponse]:
     """
     Main orchestration function for grounded AI delay analysis.
     
-    1. Gathers verified flight facts and deterministic intelligence from database.
-    2. Constructs strict grounded prompt.
-    3. Calls local Ollama service.
-    4. Validates JSON payload against AIAnalystOutput schema.
-    5. Falls back seamlessly to deterministic findings if Ollama is unreachable.
+    1. Checks in-memory cache to return previous successful syntheses immediately.
+    2. Uses per-flight concurrency locks to prevent dogpiling multiple Ollama completions.
+    3. Gathers verified flight facts and deterministic intelligence from database.
+    4. Constructs strict grounded prompt and calls local Ollama service.
+    5. Validates JSON payload against AIAnalystOutput schema.
+    6. Falls back seamlessly to deterministic findings if Ollama is unreachable.
     """
+    # Bypass cache if custom/mocked client is passed (ensures test isolation)
+    if client is not None:
+        use_cache = False
+
+    if use_cache:
+        with _CACHE_LOCK:
+            if flight_id in _ANALYSIS_CACHE and _ANALYSIS_CACHE[flight_id].status == "success":
+                logger.info("Serving grounded AI analysis for flight %s from cache", flight_id)
+                return _ANALYSIS_CACHE[flight_id]
+
+        # Acquire in-progress lock for this flight to deduplicate concurrent requests
+        with _CACHE_LOCK:
+            if flight_id not in _IN_PROGRESS_LOCKS:
+                _IN_PROGRESS_LOCKS[flight_id] = threading.Lock()
+            flight_lock = _IN_PROGRESS_LOCKS[flight_id]
+
+        flight_lock.acquire()
+        try:
+            # Re-check cache in case earlier request just completed
+            with _CACHE_LOCK:
+                if flight_id in _ANALYSIS_CACHE and _ANALYSIS_CACHE[flight_id].status == "success":
+                    return _ANALYSIS_CACHE[flight_id]
+            res = _execute_ai_analysis(conn, flight_id, client)
+            if res and res.status == "success":
+                with _CACHE_LOCK:
+                    _ANALYSIS_CACHE[flight_id] = res
+            return res
+        finally:
+            flight_lock.release()
+    else:
+        return _execute_ai_analysis(conn, flight_id, client)
+
+
+def _execute_ai_analysis(
+    conn: connection,
+    flight_id: int,
+    client: Optional[OllamaClient] = None,
+) -> Optional[FlightAIAnalysisResponse]:
     context = assemble_grounded_context(conn, flight_id)
     if not context:
         return None
