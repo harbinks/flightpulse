@@ -2,6 +2,7 @@
 Export API routers.
 """
 
+from app.routes.ai import router as ai_router
 from app.routes.disruptions import router as disruptions_router
 from app.routes.flights import router as flights_router
 from app.routes.health import router as health_router
@@ -16,4 +17,5 @@ __all__ = [
     "disruptions_router",
     "intelligence_router",
     "timeline_router",
+    "ai_router",
 ]

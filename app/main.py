@@ -9,6 +9,7 @@ import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.routes.ai import router as ai_router
 from app.routes.disruptions import router as disruptions_router
 from app.routes.flights import router as flights_router
 from app.routes.health import router as health_router
@@ -49,6 +50,7 @@ app.include_router(weather_router)
 app.include_router(disruptions_router)
 app.include_router(intelligence_router)
 app.include_router(timeline_router)
+app.include_router(ai_router)
 
 # Mount built React/Vite dashboard if available
 dist_dir = Path(__file__).resolve().parent.parent / "frontend" / "dist"

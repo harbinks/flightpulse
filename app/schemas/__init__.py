@@ -2,6 +2,11 @@
 Export all Pydantic API response models.
 """
 
+from app.schemas.ai import (
+    AIAnalystOutput,
+    FlightAIAnalysisResponse,
+    GroundedEvidenceContext,
+)
 from app.schemas.disruptions import DisruptionEventItem, FlightDisruptionsResponse
 from app.schemas.flights import FlightDetailResponse, FlightListResponse, FlightSummary
 from app.schemas.intelligence import (
@@ -27,4 +32,7 @@ __all__ = [
     "DelayIntelligenceResponse",
     "TimelineEventItem",
     "FlightTimelineResponse",
+    "GroundedEvidenceContext",
+    "AIAnalystOutput",
+    "FlightAIAnalysisResponse",
 ]
