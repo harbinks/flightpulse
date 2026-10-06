@@ -14,6 +14,7 @@ from app.routes.disruptions import router as disruptions_router
 from app.routes.flights import router as flights_router
 from app.routes.health import router as health_router
 from app.routes.intelligence import router as intelligence_router
+from app.routes.operations import router as operations_router
 from app.routes.timeline import router as timeline_router
 from app.routes.weather import router as weather_router
 from pipeline.config import config
@@ -51,6 +52,7 @@ app.include_router(disruptions_router)
 app.include_router(intelligence_router)
 app.include_router(timeline_router)
 app.include_router(ai_router)
+app.include_router(operations_router)
 
 from fastapi import Request
 from fastapi.responses import JSONResponse

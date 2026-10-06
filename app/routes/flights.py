@@ -27,6 +27,13 @@ def list_flights(
     conn: connection = Depends(get_db),
 ) -> FlightListResponse:
     """Search and filter flights stored in the FlightPulse database."""
+    clean_mode = (mode or "demo").strip().lower()
+    if clean_mode not in ("demo", "live"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid flight mode '{mode}'. Must be 'demo' or 'live'.",
+        )
+
     return search_flights(
         conn=conn,
         airline=airline,
