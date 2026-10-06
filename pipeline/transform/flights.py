@@ -163,23 +163,32 @@ def transform_flight_records(
             continue
 
         # 4. Parse Timestamps
-        # OpenSky uses firstSeen (actual dep) and lastSeen (actual arr).
-        # When scheduled times are missing in raw OpenSky, use firstSeen as baseline or provided scheduled fields.
-        sched_dep = parse_unix_timestamp(raw.get("scheduledDeparture") or raw.get("firstSeen"))
-        sched_arr = parse_unix_timestamp(raw.get("scheduledArrival") or raw.get("lastSeen"))
+        # OpenSky provides firstSeen (actual dep) and lastSeen (actual arr).
+        raw_sched_dep = raw.get("scheduledDeparture")
+        raw_sched_arr = raw.get("scheduledArrival")
+        has_published_schedule = bool(raw_sched_dep)
+
+        is_cancelled = bool(raw.get("isCancelled") or raw.get("status") == "CANCELLED")
 
         actual_dep = parse_unix_timestamp(raw.get("firstSeen") or raw.get("actualDeparture"))
         actual_arr = parse_unix_timestamp(raw.get("lastSeen") or raw.get("actualArrival"))
 
-        is_cancelled = bool(raw.get("isCancelled") or raw.get("status") == "CANCELLED")
+        if has_published_schedule:
+            sched_dep = parse_unix_timestamp(raw_sched_dep)
+            sched_arr = parse_unix_timestamp(raw_sched_arr) if raw_sched_arr else sched_dep
+        else:
+            # Telemetry-only live observation: OpenSky does NOT provide scheduled timetable.
+            # To satisfy the database NOT NULL constraint on scheduled_departure while never
+            # fabricating a commercial timetable or commercial delay:
+            # - We use actual_dep as the reference scheduled timestamp
+            # - departure_delay_minutes and arrival_delay_minutes are strictly 0 (no commercial delay inferred)
+            # - delay_category is strictly None
+            sched_dep = actual_dep
+            sched_arr = actual_arr or actual_dep
 
         if not sched_dep:
             skipped_list.append({"index": idx, "reason": "INVALID_SCHEDULED_DEPARTURE_TIMESTAMP", "raw": raw})
             continue
-
-        # If scheduled arrival is missing, estimate based on scheduled departure + standard 2h
-        if not sched_arr:
-            sched_arr = sched_dep
 
         # 5. Classify Status & Delays
         if is_cancelled:
@@ -188,7 +197,7 @@ def transform_flight_records(
             arr_delay = 0
             actual_dep = None
             actual_arr = None
-        else:
+        elif has_published_schedule:
             dep_delay = compute_delay_minutes(sched_dep, actual_dep)
             arr_delay = compute_delay_minutes(sched_arr, actual_arr)
             if actual_arr is not None:
@@ -197,16 +206,36 @@ def transform_flight_records(
                 status = "EN_ROUTE"
             else:
                 status = "SCHEDULED"
-
-        # 6. Delay Category (Source-reported)
-        delay_cat = raw.get("delayCategory")
-        if delay_cat and delay_cat.upper() in {"CARRIER", "WEATHER", "NAS", "SECURITY", "LATE_AIRCRAFT", "OTHER"}:
-            delay_cat = delay_cat.upper()
         else:
+            # Telemetry-only live flight observation
+            dep_delay = 0
+            arr_delay = 0
+            if actual_arr is not None:
+                status = "LANDED"
+            elif actual_dep is not None:
+                status = "EN_ROUTE"
+            else:
+                status = "SCHEDULED"
+
+        # 6. Delay Category (Source-reported - only valid if explicitly provided by source)
+        if has_published_schedule:
+            delay_cat = raw.get("delayCategory")
+            if delay_cat and delay_cat.upper() in {"CARRIER", "WEATHER", "NAS", "SECURITY", "LATE_AIRCRAFT", "OTHER"}:
+                delay_cat = delay_cat.upper()
+            else:
+                delay_cat = None
+        else:
+            # Never invent or assign a delay category for raw telemetry observations
             delay_cat = None
 
         # 7. Check In-Batch Deduplication
-        unique_key = (airline_id, parsed_flight_num, sched_dep)
+        # For live telemetry, key by (icao24, parsed_flight_num, actual_dep or sched_dep)
+        icao24 = (raw.get("icao24") or "").strip().lower()
+        if not has_published_schedule and icao24:
+            unique_key = (airline_id, icao24, sched_dep)
+        else:
+            unique_key = (airline_id, parsed_flight_num, sched_dep)
+
         if unique_key in seen_unique_keys:
             duplicate_count += 1
             logger.debug("Skipping in-batch duplicate flight: %s at %s", parsed_flight_num, sched_dep)
@@ -214,7 +243,7 @@ def transform_flight_records(
         seen_unique_keys.add(unique_key)
 
         flight_date = sched_dep.strftime("%Y-%m-%d")
-        source_rec_id = str(raw.get("icao24") or f"{parsed_flight_num}-{int(sched_dep.timestamp())}")
+        source_rec_id = str(icao24 or raw.get("source_record_id") or f"{parsed_flight_num}-{int(sched_dep.timestamp())}")
 
         transformed = TransformedFlight(
             flight_number=parsed_flight_num,
@@ -230,7 +259,7 @@ def transform_flight_records(
             departure_delay_minutes=dep_delay,
             arrival_delay_minutes=arr_delay,
             delay_category=delay_cat,
-            tail_number=raw.get("icao24"),
+            tail_number=icao24 or None,
             aircraft_type=raw.get("aircraftType"),
             distance_miles=float(raw.get("distanceMiles")) if raw.get("distanceMiles") else None,
             data_source=data_source,
