@@ -124,7 +124,7 @@ class OllamaClient:
             "options": {
                 "temperature": 0.1,  # Low temperature for deterministic adherence to evidence
                 "top_p": 0.9,
-                "num_ctx": 2048,
+                "num_ctx": 1024,
             },
         }
 

@@ -34,28 +34,24 @@ from app.services.timeline_service import build_flight_timeline
 logger = logging.getLogger("flightpulse.ai.analyst")
 
 SYSTEM_PROMPT = """You are the FlightPulse Aviation Analyst, an expert air traffic operations intelligence assistant.
-Your sole mission is to explain flight delays using ONLY the supplied factual evidence from meteorological METAR observations, FAA Air Traffic Control System Command Center (ATCSCC) notices, and airline dispatch logs.
+Explain flight delays using ONLY the supplied factual evidence from METAR observations, FAA ATCSCC notices, and dispatch logs.
 
 STRICT GROUNDING RULES:
 1. The DETERMINISTIC RESULT is the absolute authority. You MUST NOT overturn, contradict, or alter the attributed primary cause or confidence level.
-2. Use ONLY the supplied flight facts, weather records, FAA notices, and flight events.
-3. DO NOT invent facts, weather conditions, wind speeds, mechanical failures, crew issues, or FAA programs not present in the prompt.
-4. Distinguish clearly between the carrier-reported category (unverified upstream claim) and the inferred candidate cause (evidence-backed finding).
-5. If the evidence is insufficient or marked UNKNOWN, explicitly state that available meteorological and ATC data does not explain the delay.
-6. Never increase confidence beyond the deterministic engine's confidence level.
-7. Do not fabricate timestamps or statistics.
-8. If evidence signals conflict, explain the discrepancy transparently.
+2. Cite ONLY supplied flight facts, weather records, and FAA notices. DO NOT invent facts, weather conditions, wind speeds, mechanical failures, crew issues, or causes.
+3. Distinguish clearly between the carrier-reported category (unverified upstream claim) and the inferred candidate cause (evidence-backed finding).
+4. If evidence is insufficient, explicitly state that available data does not explain the delay.
+5. Do not fabricate timestamps or statistics.
 
 OUTPUT FORMAT:
-You MUST respond with a strictly valid JSON object matching this schema exactly:
+Respond with a strictly valid JSON object matching this schema:
 {
-  "summary": "Concise 1-2 sentence executive explanation of the delay.",
+  "summary": "1-sentence executive briefing summarizing the flight, route, delay duration, and primary cause.",
   "primary_cause": "The primary cause matching the deterministic finding exactly.",
   "confidence": "The confidence level matching the deterministic finding (HIGH, MEDIUM, LOW, or INSUFFICIENT).",
-  "explanation": "Detailed, professional narrative explaining how the specific weather and ATC advisories correlated with the departure delay.",
+  "explanation": "2 concise sentences explaining how the specific weather and ATC advisories correlated with the departure delay.",
   "evidence_used": [
-    "Specific factual data point cited in your narrative",
-    "Another specific meteorological or ATC milestone cited"
+    "Specific factual data point cited from the dossier"
   ],
   "limitations": [
     "Operational uncertainties, unverified airline claims, or time gaps in available logs"
@@ -156,32 +152,31 @@ def assemble_grounded_context(conn: connection, flight_id: int) -> Optional[Grou
 
 def build_grounded_prompt(context: GroundedEvidenceContext) -> str:
     """
-    Construct the factual user prompt detailing the authoritative deterministic attribution
+    Construct a concise, factual user prompt detailing the authoritative deterministic attribution
     and strictly bound evidence bundle.
     """
     prompt = f"""FLIGHT OPERATIONS DOSSIER:
-- Flight: {context.flight_number} ({context.airline})
-- Route: {context.route}
-- Scheduled Departure: {context.scheduled_departure}
-- Actual Departure: {context.actual_departure or 'N/A'}
-- Departure Delay: {context.departure_delay_minutes} minutes (Operational Status: {context.status})
+- Flight: {context.flight_number} ({context.airline}) | Route: {context.route}
+- Scheduled Departure: {context.scheduled_departure} | Actual: {context.actual_departure or 'N/A'}
+- Departure Delay: {context.departure_delay_minutes} minutes ({context.status})
 - Carrier-Reported Reason: {context.reported_delay_category or 'NONE'}
 
 AUTHORITATIVE DETERMINISTIC ENGINE FINDINGS:
 - Inferred Primary Cause: {context.deterministic_cause}
 - Confidence Level: {context.deterministic_confidence}
 - Evaluation Score: {context.deterministic_score:.2f}
+
+SUPPORTING EVIDENCE IDENTIFIED BY ENGINE:
 """
-    prompt += "\nSUPPORTING EVIDENCE IDENTIFIED BY ENGINE:\n"
     if context.supporting_evidence:
-        for ev in context.supporting_evidence[:5]:
+        for ev in context.supporting_evidence[:3]:
             prompt += f"  * {ev}\n"
     else:
         prompt += "  * No corroborating meteorological or air traffic advisories found.\n"
 
     prompt += "\nMETEOROLOGICAL OBSERVATIONS (METAR AT ORIGIN):\n"
     if context.weather_observations:
-        for w in context.weather_observations[:3]:
+        for w in context.weather_observations[:2]:
             prompt += f"  * {w}\n"
     else:
         prompt += "  * No abnormal weather records logged in the temporal window.\n"
@@ -192,13 +187,6 @@ AUTHORITATIVE DETERMINISTIC ENGINE FINDINGS:
             prompt += f"  * {d}\n"
     else:
         prompt += "  * Zero active FAA ground stops or NAS flow delay programs logged.\n"
-
-    prompt += "\nCHRONOLOGICAL MILESTONES:\n"
-    if context.timeline_milestones:
-        for m in context.timeline_milestones[:5]:
-            prompt += f"  * {m}\n"
-    else:
-        prompt += "  * Standard flight progression.\n"
 
     prompt += "\nTask: Synthesize this dossier into the required JSON format. Ground every sentence in the facts above."
     return prompt

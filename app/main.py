@@ -58,6 +58,29 @@ if dist_dir.exists():
     app.mount("/dashboard", StaticFiles(directory=str(dist_dir), html=True), name="dashboard")
 
 
+import threading
+
+
+def _prewarm_ai_cache() -> None:
+    """Pre-warm in-memory AI analyst cache for primary demo flight in background thread."""
+    try:
+        from pipeline.database import get_db_connection
+        from app.services.ai_analyst import analyze_flight_with_ai
+        conn = get_db_connection()
+        try:
+            analyze_flight_with_ai(conn, flight_id=2)
+            logging.getLogger("flightpulse.ai").info("Background pre-warm for flight 2 complete.")
+        finally:
+            conn.close()
+    except Exception as e:
+        logging.getLogger("flightpulse.ai").debug("Background pre-warm notice: %s", e)
+
+
+@app.on_event("startup")
+def on_startup() -> None:
+    threading.Thread(target=_prewarm_ai_cache, daemon=True).start()
+
+
 @app.get("/", tags=["Root"])
 def root():
     """API root descriptor."""

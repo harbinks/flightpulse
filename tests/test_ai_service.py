@@ -246,3 +246,46 @@ def test_prompt_grounding_rules():
         assert "FAA AIR TRAFFIC MANAGEMENT DISRUPTIONS" in user_prompt
     finally:
         conn.close()
+
+
+# ============================================================================
+# 11. AI Cache & Concurrency Deduplication Verification
+# ============================================================================
+
+def test_ai_cache_and_deduplication():
+    """Verify that successful AI syntheses are cached in-memory and return instantly."""
+    from app.services.ai_analyst import clear_ai_cache, _ANALYSIS_CACHE
+
+    clear_ai_cache()
+    mock_payload = {
+        "summary": "Delayed due to thunderstorms at ORD.",
+        "primary_cause": "ATC / WEATHER INTERACTION",
+        "confidence": "HIGH",
+        "explanation": "Severe storm observed at 20:21 UTC.",
+        "evidence_used": ["Thunderstorm at ORD"],
+        "limitations": ["None"],
+    }
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"response": json.dumps(mock_payload)}
+
+    conn = get_db_connection()
+    try:
+        with patch.object(httpx.Client, "post", return_value=mock_resp) as mock_post:
+            # First call executes inference and populates cache
+            res1 = analyze_flight_with_ai(conn, flight_id=2, use_cache=True)
+            assert res1 is not None
+            assert res1.status == "success"
+            assert mock_post.call_count == 1
+            assert 2 in _ANALYSIS_CACHE
+
+            # Second call retrieves directly from cache with zero additional HTTP posts
+            res2 = analyze_flight_with_ai(conn, flight_id=2, use_cache=True)
+            assert res2 is not None
+            assert res2.status == "success"
+            assert mock_post.call_count == 1  # Unchanged!
+            assert res2.analysis.summary == res1.analysis.summary
+    finally:
+        clear_ai_cache()
+        conn.close()

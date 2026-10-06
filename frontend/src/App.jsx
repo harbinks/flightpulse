@@ -131,6 +131,10 @@ export default function App() {
 
     let isMounted = true;
     setDetailLoading(true);
+    if (!aiCache[selectedFlightId]) {
+      setAiAnalysis(null);
+    }
+    setAiError(null);
 
     // Cancel any existing in-flight AI requests
     if (aiAbortControllerRef.current) {
