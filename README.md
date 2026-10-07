@@ -235,10 +235,66 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-*(Optional) Start Ollama for grounded analysis:*
+*(Optional) Start Ollama for local grounded analysis:*
 ```bash
 ollama run llama3:latest
 ```
+
+---
+
+## Deployment Architecture
+
+FlightPulse is architected for cloud-native zero-downtime deployment:
+
+```
+                      +-----------------------------+
+                      |       Vercel Hosting        |
+                      |    (React / Vite SPA Frontend)
+                      +--------------+--------------+
+                                     |
+                                     | HTTPS / JSON
+                                     v
+                      +-----------------------------+
+                      |        Render Hosting       |
+                      |   (FastAPI / Python Web App)|
+                      +--------------+--------------+
+                                     |
+                                     | PostgreSQL TCP
+                                     v
+                      +-----------------------------+
+                      |     Managed PostgreSQL      |
+                      |  (Render / Supabase / Neon) |
+                      +-----------------------------+
+```
+
+### 1. Database Provisioning
+Run `python init_db.py` with your remote database's connection string:
+```bash
+DATABASE_URL="postgres://user:password@hostname:5432/dbname" python init_db.py
+```
+This automatically applies `database/schema.sql` and loads the baseline benchmark flights from `database/seed.sql` while preserving DEMO/LIVE provenance isolation.
+
+### 2. Render Backend Web Service
+- **Build Command**: `pip install -r requirements.txt`
+- **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **Environment Variables**:
+  - `DATABASE_URL`: Managed PostgreSQL connection string.
+  - `CORS_ORIGINS`: Your Vercel frontend URL (e.g. `https://flightpulse.vercel.app`).
+  - `PORT`: Automatically assigned by Render.
+
+### 3. Vercel Frontend Deployment
+- **Framework Preset**: Vite
+- **Root Directory**: `frontend`
+- **Build Command**: `npm run build`
+- **Output Directory**: `dist`
+- **Environment Variables**:
+  - `VITE_API_BASE_URL`: Your Render backend service URL (e.g. `https://flightpulse.onrender.com`).
+- **SPA Rewrites**: Pre-configured in [`frontend/vercel.json`](frontend/vercel.json).
+
+### 4. Local AI Analyst in Production
+- Ollama is designed for local and self-hosted environments.
+- In production, when Ollama is not deployed to the cloud container, FlightPulse gracefully activates its deterministic intelligence fallback.
+- The UI transparently notes that the local AI model is offline while delivering 100% of the deterministic flight delay attribution, candidate breakdown, and correlated weather facts without error.
 
 ---
 

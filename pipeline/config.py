@@ -17,11 +17,12 @@ load_dotenv(dotenv_path=BASE_DIR / ".env")
 
 @dataclass(frozen=True)
 class DatabaseConfig:
-    host: str = os.getenv("DB_HOST", "localhost")
-    port: int = int(os.getenv("DB_PORT", "5432"))
-    name: str = os.getenv("DB_NAME", "flightpulse")
-    user: str = os.getenv("DB_USER", "postgres")
-    password: str = os.getenv("DB_PASSWORD", "")
+    url: str = os.getenv("DATABASE_URL", "")
+    host: str = os.getenv("DB_HOST", os.getenv("DATABASE_HOST", "localhost"))
+    port: int = int(os.getenv("DB_PORT", os.getenv("DATABASE_PORT", "5432")))
+    name: str = os.getenv("DB_NAME", os.getenv("DATABASE_NAME", "flightpulse"))
+    user: str = os.getenv("DB_USER", os.getenv("DATABASE_USER", "postgres"))
+    password: str = os.getenv("DB_PASSWORD", os.getenv("DATABASE_PASSWORD", ""))
 
 
 @dataclass(frozen=True)

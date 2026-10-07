@@ -19,17 +19,20 @@ def get_db_connection() -> connection:
     """Create and return a new PostgreSQL connection."""
     db = config.database
     try:
-        conn = psycopg2.connect(
-            host=db.host,
-            port=db.port,
-            dbname=db.name,
-            user=db.user,
-            password=db.password,
-            connect_timeout=10,
-        )
+        if db.url:
+            conn = psycopg2.connect(db.url, connect_timeout=10)
+        else:
+            conn = psycopg2.connect(
+                host=db.host,
+                port=db.port,
+                dbname=db.name,
+                user=db.user,
+                password=db.password,
+                connect_timeout=10,
+            )
         return conn
     except Exception as exc:
-        logger.error("Failed to connect to PostgreSQL database %s on %s:%s: %s", db.name, db.host, db.port, exc)
+        logger.error("Failed to connect to PostgreSQL database: %s", exc)
         raise
 
 

@@ -32,10 +32,15 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Configure CORS for local development (React/Vite on 5173, Streamlit on 8501)
+# Configure CORS origins from environment variable or sensible defaults
+import os
+
+cors_env = os.getenv("CORS_ORIGINS", "*")
+allowed_origins = [o.strip() for o in cors_env.split(",") if o.strip()] if cors_env != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -118,4 +123,5 @@ def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=False)

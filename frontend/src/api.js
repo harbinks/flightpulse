@@ -5,7 +5,7 @@
  * chronological timelines, weather telemetry, and the grounded Ollama AI analyst.
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
 /**
  * Handle HTTP response and parse JSON.
