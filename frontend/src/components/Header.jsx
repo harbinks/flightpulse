@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Radio, Database } from 'lucide-react';
+import { RefreshCw, Radio } from 'lucide-react';
 
 export default function Header({
   systemHealth,
@@ -16,7 +16,7 @@ export default function Header({
       const h = String(now.getUTCHours()).padStart(2, '0');
       const m = String(now.getUTCMinutes()).padStart(2, '0');
       const s = String(now.getUTCSeconds()).padStart(2, '0');
-      setUtcTime(`${h}:${m}:${s} UTC`);
+      setUtcTime(`${h}:${m}:${s}`);
     };
 
     updateTime();
@@ -62,26 +62,16 @@ export default function Header({
 
       <div className="fp-header-right">
         <div className="fp-telemetry-item">
-          <span className="fp-telemetry-label">UTC CLOCK</span>
+          <span className="fp-telemetry-label">UTC</span>
           <span className="fp-telemetry-val mono">{utcTime || '—'}</span>
         </div>
 
         <div className="fp-telemetry-separator"></div>
 
         <div className="fp-telemetry-item">
-          <span className="fp-telemetry-label">DATABASE</span>
-          <span className="fp-telemetry-val mono">
-            <Database size={11} className="inline-icon" /> POSTGRESQL 17
-          </span>
-        </div>
-
-        <div className="fp-telemetry-separator"></div>
-
-        <div className="fp-telemetry-item">
-          <span className="fp-telemetry-label">API SYSTEM</span>
           <span className={`fp-status-indicator ${isConnected ? 'status-live' : 'status-offline'} mono`}>
             <Radio size={11} className="inline-icon" />
-            {isConnected ? 'ONLINE :8000' : 'OFFLINE'}
+            {isConnected ? 'SYSTEM ONLINE' : 'SYSTEM OFFLINE'}
           </span>
         </div>
 
@@ -92,7 +82,7 @@ export default function Header({
           disabled={loading}
         >
           <RefreshCw size={13} className={loading ? 'spin' : ''} />
-          <span className="refresh-btn-label">POLL DATA</span>
+          <span className="refresh-btn-label">REFRESH DATA</span>
         </button>
       </div>
     </header>

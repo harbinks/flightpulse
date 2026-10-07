@@ -373,7 +373,11 @@ export default function App() {
           {!selectedFlightId || !flightDetail ? (
             <div className="fp-empty-workspace">
               <div className="fp-empty-banner mono">
-                <span className="empty-kicker">OPERATIONAL STATUS: READY</span>
+                <span className="empty-kicker">
+                  {mode === 'live' && (operationsStatus?.overall_status === 'PARTIAL' || operationsStatus?.sources?.opensky?.status === 'RATE_LIMITED')
+                    ? 'OPERATIONAL STATUS: PARTIAL'
+                    : 'OPERATIONAL STATUS: READY'}
+                </span>
                 <h2>SELECT A FLIGHT IDENTIFIER TO COMMENCE DELAY INVESTIGATION</h2>
                 <p>
                   FlightPulse correlates airport METAR observations, FAA National Airspace System advisories, and gate timestamps through deterministic logic and local Ollama synthesis.
