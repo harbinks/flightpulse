@@ -24,6 +24,9 @@ export default function OperationsRibbon({
     if (rawStatus === 'SUCCESS') {
       displayStatus = 'OK';
       statusClass = 'status-ok';
+    } else if (rawStatus === 'RATE_LIMITED') {
+      displayStatus = 'RATE LIMITED';
+      statusClass = 'status-rate-limited';
     } else if (rawStatus === 'FAILED') {
       displayStatus = 'FAILED';
       statusClass = 'status-failed';

@@ -78,7 +78,7 @@ def test_operations_status_schema_and_keys():
         assert src_name in data["sources"]
         src = data["sources"][src_name]
         assert "status" in src
-        assert src["status"] in ("SUCCESS", "FAILED", "NEVER_SYNCED", "SKIPPED")
+        assert src["status"] in ("SUCCESS", "RATE_LIMITED", "FAILED", "NEVER_SYNCED", "SKIPPED")
         assert "records_extracted" in src
         assert "records_inserted" in src
         assert "records_updated" in src

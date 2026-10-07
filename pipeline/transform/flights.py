@@ -54,6 +54,14 @@ class TransformReport:
     def total_skipped(self) -> int:
         return len(self.skipped_records)
 
+    @property
+    def skip_reasons(self) -> Dict[str, int]:
+        counts: Dict[str, int] = {}
+        for item in self.skipped_records:
+            reason = item.get("reason", "OTHER")
+            counts[reason] = counts.get(reason, 0) + 1
+        return counts
+
 
 def parse_unix_timestamp(ts: Any) -> Optional[datetime]:
     """

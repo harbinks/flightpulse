@@ -167,8 +167,12 @@ export default function App() {
     try {
       const res = await syncLiveFeeds();
       const st = res.overall_status || res.status;
+      const openskyStatus = res.sources?.flights?.status || res.sources?.opensky?.status;
+
       if (st === 'SUCCESS') {
         setSyncResult({ type: 'success', message: 'LIVE FEEDS UPDATED' });
+      } else if (openskyStatus === 'RATE_LIMITED') {
+        setSyncResult({ type: 'rate-limited', message: 'OPENSKY RATE LIMITED — TRY LATER' });
       } else if (st === 'PARTIAL') {
         setSyncResult({ type: 'partial', message: 'LIVE SYNC PARTIAL' });
       } else {
@@ -360,6 +364,7 @@ export default function App() {
             error={flightsError}
             mode={mode}
             onSync={handleSyncFeeds}
+            operationsStatus={operationsStatus}
           />
         </aside>
 

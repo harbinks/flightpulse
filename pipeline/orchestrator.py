@@ -20,7 +20,12 @@ from pipeline.database import (
     load_airport_lookup,
     load_airports_with_coordinates,
 )
-from pipeline.extract.flights import extract_opensky_flights, load_fixture_flights
+from pipeline.extract.flights import (
+    OpenSkyExtractionError,
+    OpenSkyRateLimitError,
+    extract_opensky_flights,
+    load_fixture_flights,
+)
 from pipeline.extract.news import extract_faa_nas_events, load_news_fixtures
 from pipeline.extract.weather import extract_airport_weather, load_weather_fixtures
 from pipeline.load.flights import load_flights_to_database
@@ -47,6 +52,7 @@ class SourceSyncResult:
     error_message: Optional[str] = None
     duration_ms: float = 0.0
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    skip_reasons: Dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -61,6 +67,7 @@ class SourceSyncResult:
             "error_message": self.error_message,
             "duration_ms": round(self.duration_ms, 2),
             "timestamp": self.timestamp.isoformat(),
+            "skip_reasons": self.skip_reasons,
         }
 
 
@@ -180,12 +187,18 @@ def ingest_flights_branch(
         )
         res.records_transformed = report.total_transformed
         res.records_skipped = report.total_skipped
+        res.skip_reasons = report.skip_reasons
 
         metrics = load_flights_to_database(conn, report.transformed, dry_run=dry_run)
         res.records_inserted = metrics.inserted
         res.records_updated = metrics.updated
         res.errors = metrics.errors
         res.status = "SUCCESS"
+
+    except OpenSkyRateLimitError as rle:
+        logger.warning("Flight ingestion branch rate limited by OpenSky: %s", rle)
+        res.status = "RATE_LIMITED"
+        res.error_message = str(rle)
 
     except Exception as exc:
         logger.error("Flight ingestion branch failed: %s", exc)

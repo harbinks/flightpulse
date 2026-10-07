@@ -11,14 +11,14 @@ from pydantic import BaseModel, Field
 
 class SourceStatusDetail(BaseModel):
     """Operational status and latest sync telemetry for a single ingestion source."""
-    status: str = Field(description="Operational status: 'SUCCESS', 'FAILED', or 'NEVER_SYNCED'")
+    status: str = Field(description="Operational status: 'SUCCESS', 'RATE_LIMITED', 'FAILED', or 'NEVER_SYNCED'")
     last_attempt: Optional[datetime] = Field(default=None, description="Timestamp of the most recent sync attempt")
     last_success: Optional[datetime] = Field(default=None, description="Timestamp of the most recent successful sync")
     records_extracted: int = Field(default=0, description="Records extracted during latest sync attempt")
     records_inserted: int = Field(default=0, description="Records inserted during latest sync attempt")
     records_updated: int = Field(default=0, description="Records updated during latest sync attempt")
     duration_ms: float = Field(default=0.0, description="Execution latency in milliseconds for latest attempt")
-    error_message: Optional[str] = Field(default=None, description="Error message if the latest sync attempt failed")
+    error_message: Optional[str] = Field(default=None, description="Error message if the latest sync attempt failed or was rate limited")
 
 
 class OperationsStatusResponse(BaseModel):
@@ -31,7 +31,7 @@ class OperationsStatusResponse(BaseModel):
 class SourceSyncResultDetail(BaseModel):
     """Execution metrics for an individual ingestion source in a sync run."""
     source_name: str
-    status: str  # 'SUCCESS', 'FAILED', 'SKIPPED'
+    status: str  # 'SUCCESS', 'RATE_LIMITED', 'FAILED', 'SKIPPED'
     records_extracted: int = 0
     records_transformed: int = 0
     records_inserted: int = 0
@@ -41,6 +41,7 @@ class SourceSyncResultDetail(BaseModel):
     error_message: Optional[str] = None
     duration_ms: float = 0.0
     timestamp: datetime
+    skip_reasons: Dict[str, int] = Field(default_factory=dict)
 
 
 class OperationsSyncResponse(BaseModel):

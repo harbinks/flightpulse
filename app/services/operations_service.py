@@ -172,6 +172,7 @@ def trigger_live_sync(
                 error_message=src_val.error_message,
                 duration_ms=src_val.duration_ms,
                 timestamp=src_val.timestamp,
+                skip_reasons=getattr(src_val, "skip_reasons", {}),
             )
 
         resp = OperationsSyncResponse(

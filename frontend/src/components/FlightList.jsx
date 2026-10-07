@@ -9,6 +9,7 @@ export default function FlightList({
   error,
   mode = 'demo',
   onSync,
+  operationsStatus,
 }) {
   if (loading) {
     return (
@@ -29,10 +30,26 @@ export default function FlightList({
 
   if (!flights || flights.length === 0) {
     if (mode === 'live') {
+      const opensky = operationsStatus?.sources?.opensky || {};
+      const isRateLimited = (opensky.status || '').toUpperCase() === 'RATE_LIMITED';
+      const isFailed = (opensky.status || '').toUpperCase() === 'FAILED';
+
       return (
         <div className="fp-list-state fp-live-empty-state">
-          <span className="empty-title mono">NO LIVE TELEMETRY AVAILABLE</span>
-          <p className="empty-desc">OpenSky currently returned no usable live flight records for the configured airspace.</p>
+          <span className="empty-title mono">
+            {isRateLimited
+              ? 'OPENSKY RATE LIMITED'
+              : isFailed
+              ? 'OPENSKY CONNECTION FAILED'
+              : 'NO LIVE TELEMETRY AVAILABLE'}
+          </span>
+          <p className="empty-desc">
+            {isRateLimited
+              ? 'The upstream OpenSky API rate limit has been reached. Please wait for the rate window to cool down before resyncing.'
+              : isFailed
+              ? 'Unable to reach the upstream OpenSky service. Check network connectivity or retry.'
+              : 'OpenSky returned no usable live flight records for the configured airspace window.'}
+          </p>
           {onSync && (
             <button type="button" className="fp-empty-sync-btn mono" onClick={onSync}>
               SYNC LIVE FEEDS

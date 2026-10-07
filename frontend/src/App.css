@@ -2108,6 +2108,20 @@
   border: 1px solid var(--accent-yellow);
 }
 
+.fp-source-dot.status-rate-limited {
+  color: var(--accent-amber);
+}
+
+.fp-source-status.status-rate-limited {
+  color: var(--accent-amber);
+}
+
+.fp-sync-result-badge.result-rate-limited {
+  background-color: var(--accent-amber-tint, rgba(217, 119, 6, 0.15));
+  color: var(--accent-amber);
+  border: 1px solid var(--accent-amber);
+}
+
 .fp-sync-result-badge.result-failed {
   background-color: var(--status-delay-bg);
   color: var(--status-delay);

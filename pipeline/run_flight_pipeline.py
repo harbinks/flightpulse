@@ -128,7 +128,7 @@ def run_pipeline(
             airport_iata_map=airport_iata_map,
             airline_icao_map=airline_icao_map,
             airline_iata_map=airline_iata_map,
-            data_source="OPENSKY" if source_type.lower() == "opensky" else "FIXTURE_REPLAY",
+            data_source="OPENSKY_LIVE" if source_type.lower() == "opensky" else "FIXTURE_REPLAY",
         )
         metrics["records_transformed"] = report.total_transformed
         metrics["records_skipped"] = report.total_skipped
