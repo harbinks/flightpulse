@@ -106,9 +106,9 @@ export default function FlightList({
 
               <div className="fp-strip-row-2">
                 <div className="fp-strip-route">
-                  <span className="fp-strip-station mono">{flight.origin_iata}</span>
+                  <span className="fp-strip-station mono">{flight.origin_iata || '---'}</span>
                   <span className="fp-strip-arrow">➔</span>
-                  <span className="fp-strip-station mono">{flight.destination_iata}</span>
+                  <span className="fp-strip-station mono">{flight.destination_iata || '---'}</span>
                 </div>
 
                 <div className="fp-strip-times mono">

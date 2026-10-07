@@ -54,8 +54,8 @@ export default function FlightHeader({ flight, intelligence }) {
         {/* Route Block */}
         <div className="fp-route-block">
           <div className="fp-station-cell origin">
-            <span className="fp-station-code mono">{flight.origin_iata}</span>
-            <span className="fp-station-city">{flight.origin_city || flight.origin_iata}</span>
+            <span className="fp-station-code mono">{flight.origin_iata || '---'}</span>
+            <span className="fp-station-city">{flight.origin_city || flight.origin_iata || 'Airspace Origin'}</span>
           </div>
 
           <div className="fp-route-trajectory">
@@ -68,8 +68,10 @@ export default function FlightHeader({ flight, intelligence }) {
           </div>
 
           <div className="fp-station-cell destination">
-            <span className="fp-station-code mono">{flight.destination_iata}</span>
-            <span className="fp-station-city">{flight.destination_city || flight.destination_iata}</span>
+            <span className="fp-station-code mono">{flight.destination_iata || '---'}</span>
+            <span className="fp-station-city">
+              {flight.destination_city || flight.destination_iata || (isTelemetry ? 'In-Flight Track' : 'Destination')}
+            </span>
           </div>
         </div>
 

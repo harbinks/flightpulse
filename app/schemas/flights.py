@@ -11,12 +11,12 @@ class FlightSummary(BaseModel):
     """Lightweight flight summary for list views and search results."""
     id: int
     flight_number: str
-    airline_name: str
-    airline_iata: str
-    origin_iata: str
-    origin_city: str
-    destination_iata: str
-    destination_city: str
+    airline_name: Optional[str] = None
+    airline_iata: Optional[str] = None
+    origin_iata: Optional[str] = None
+    origin_city: Optional[str] = None
+    destination_iata: Optional[str] = None
+    destination_city: Optional[str] = None
     flight_date: str
     scheduled_departure: Optional[datetime] = None
     actual_departure: Optional[datetime] = None
@@ -34,19 +34,19 @@ class FlightDetailResponse(BaseModel):
     """Full detail model for a single flight."""
     id: int
     flight_number: str
-    airline_id: int
-    airline_name: str
-    airline_iata: str
-    origin_airport_id: int
-    origin_iata: str
-    origin_name: str
-    origin_city: str
-    origin_timezone: str
-    destination_airport_id: int
-    destination_iata: str
-    destination_name: str
-    destination_city: str
-    destination_timezone: str
+    airline_id: Optional[int] = None
+    airline_name: Optional[str] = None
+    airline_iata: Optional[str] = None
+    origin_airport_id: Optional[int] = None
+    origin_iata: Optional[str] = None
+    origin_name: Optional[str] = None
+    origin_city: Optional[str] = None
+    origin_timezone: Optional[str] = None
+    destination_airport_id: Optional[int] = None
+    destination_iata: Optional[str] = None
+    destination_name: Optional[str] = None
+    destination_city: Optional[str] = None
+    destination_timezone: Optional[str] = None
     flight_date: str
     scheduled_departure: Optional[datetime] = None
     actual_departure: Optional[datetime] = None

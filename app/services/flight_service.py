@@ -76,9 +76,9 @@ def search_flights(
     count_sql = f"""
         SELECT COUNT(*)
         FROM flights f
-        JOIN airlines al ON f.airline_id = al.id
-        JOIN airports orig ON f.origin_airport_id = orig.id
-        JOIN airports dest ON f.destination_airport_id = dest.id
+        LEFT JOIN airlines al ON f.airline_id = al.id
+        LEFT JOIN airports orig ON f.origin_airport_id = orig.id
+        LEFT JOIN airports dest ON f.destination_airport_id = dest.id
         {where_clause};
     """
 
@@ -100,9 +100,9 @@ def search_flights(
             f.departure_delay_minutes, f.arrival_delay_minutes, f.delay_category,
             f.aircraft_type, f.data_source
         FROM flights f
-        JOIN airlines al ON f.airline_id = al.id
-        JOIN airports orig ON f.origin_airport_id = orig.id
-        JOIN airports dest ON f.destination_airport_id = dest.id
+        LEFT JOIN airlines al ON f.airline_id = al.id
+        LEFT JOIN airports orig ON f.origin_airport_id = orig.id
+        LEFT JOIN airports dest ON f.destination_airport_id = dest.id
         {where_clause}
         {order_clause}
         LIMIT %s OFFSET %s;
@@ -158,9 +158,9 @@ def get_flight_by_id(conn: connection, flight_id: int) -> Optional[FlightDetailR
             f.departure_delay_minutes, f.arrival_delay_minutes, f.delay_category,
             f.tail_number, f.aircraft_type, f.distance_miles, f.data_source
         FROM flights f
-        JOIN airlines al ON f.airline_id = al.id
-        JOIN airports orig ON f.origin_airport_id = orig.id
-        JOIN airports dest ON f.destination_airport_id = dest.id
+        LEFT JOIN airlines al ON f.airline_id = al.id
+        LEFT JOIN airports orig ON f.origin_airport_id = orig.id
+        LEFT JOIN airports dest ON f.destination_airport_id = dest.id
         WHERE f.id = %s;
     """
     with conn.cursor() as cur:
@@ -207,6 +207,19 @@ def get_flight_weather(conn: connection, flight_id: int) -> Optional[FlightWeath
     if not flight:
         return None
 
+    ref_dep = flight.scheduled_departure or flight.actual_departure
+    ref_arr = flight.scheduled_arrival or flight.actual_arrival or ref_dep
+
+    if not ref_dep or (flight.origin_airport_id is None and flight.destination_airport_id is None):
+        return FlightWeatherResponse(
+            flight_id=flight.id,
+            flight_number=flight.flight_number,
+            origin_airport=flight.origin_iata,
+            destination_airport=flight.destination_iata,
+            origin_observations=[],
+            destination_observations=[],
+        )
+
     sql = """
         SELECT 
             w.id, w.airport_id, a.iata_code, (w.airport_id = %s) AS is_origin,
@@ -224,8 +237,8 @@ def get_flight_weather(conn: connection, flight_id: int) -> Optional[FlightWeath
     with conn.cursor() as cur:
         cur.execute(sql, (
             flight.origin_airport_id,
-            flight.origin_airport_id, flight.scheduled_departure, flight.scheduled_departure,
-            flight.destination_airport_id, flight.scheduled_arrival, flight.scheduled_arrival,
+            flight.origin_airport_id, ref_dep, ref_dep,
+            flight.destination_airport_id, ref_arr, ref_arr,
         ))
         rows = cur.fetchall()
 
@@ -271,6 +284,15 @@ def get_flight_disruptions(conn: connection, flight_id: int) -> Optional[FlightD
     if not flight:
         return None
 
+    ref_time = flight.scheduled_departure or flight.actual_departure
+    if not ref_time:
+        return FlightDisruptionsResponse(
+            flight_id=flight.id,
+            flight_number=flight.flight_number,
+            total_disruptions=0,
+            disruptions=[],
+        )
+
     sql = """
         SELECT 
             n.id, n.title, n.summary, n.source, n.url, n.event_type, n.severity,
@@ -292,8 +314,8 @@ def get_flight_disruptions(conn: connection, flight_id: int) -> Optional[FlightD
         cur.execute(sql, (
             flight.origin_airport_id, flight.destination_airport_id,
             flight.airline_id,
-            flight.scheduled_departure,
-            flight.scheduled_departure,
+            ref_time,
+            ref_time,
         ))
         rows = cur.fetchall()
 

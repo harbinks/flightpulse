@@ -15,15 +15,15 @@ class FlightDetail:
     """Core flight details extracted from the database."""
     flight_id: int
     flight_number: str
-    airline_id: int
-    airline_name: str
-    airline_iata: str
-    origin_airport_id: int
-    origin_iata: str
-    origin_name: str
-    destination_airport_id: int
-    destination_iata: str
-    destination_name: str
+    airline_id: Optional[int]
+    airline_name: Optional[str]
+    airline_iata: Optional[str]
+    origin_airport_id: Optional[int]
+    origin_iata: Optional[str]
+    origin_name: Optional[str]
+    destination_airport_id: Optional[int]
+    destination_iata: Optional[str]
+    destination_name: Optional[str]
     flight_date: str
     scheduled_departure: Optional[datetime]
     actual_departure: Optional[datetime]
@@ -115,9 +115,9 @@ def collect_flight_evidence(conn: connection, flight_ref: Union[int, str]) -> Op
                     f.departure_delay_minutes, f.arrival_delay_minutes, f.delay_category,
                     f.tail_number, f.aircraft_type
                 FROM flights f
-                JOIN airlines al ON f.airline_id = al.id
-                JOIN airports orig ON f.origin_airport_id = orig.id
-                JOIN airports dest ON f.destination_airport_id = dest.id
+                LEFT JOIN airlines al ON f.airline_id = al.id
+                LEFT JOIN airports orig ON f.origin_airport_id = orig.id
+                LEFT JOIN airports dest ON f.destination_airport_id = dest.id
                 WHERE f.id = %s
                 LIMIT 1;
             """
@@ -133,11 +133,11 @@ def collect_flight_evidence(conn: connection, flight_ref: Union[int, str]) -> Op
                     f.departure_delay_minutes, f.arrival_delay_minutes, f.delay_category,
                     f.tail_number, f.aircraft_type
                 FROM flights f
-                JOIN airlines al ON f.airline_id = al.id
-                JOIN airports orig ON f.origin_airport_id = orig.id
-                JOIN airports dest ON f.destination_airport_id = dest.id
+                LEFT JOIN airlines al ON f.airline_id = al.id
+                LEFT JOIN airports orig ON f.origin_airport_id = orig.id
+                LEFT JOIN airports dest ON f.destination_airport_id = dest.id
                 WHERE f.flight_number = %s
-                ORDER BY f.scheduled_departure DESC
+                ORDER BY f.scheduled_departure DESC NULLS LAST, f.actual_departure DESC NULLS LAST
                 LIMIT 1;
             """
             cur.execute(flight_sql, (flight_ref.strip().upper(),))
@@ -164,77 +164,82 @@ def collect_flight_evidence(conn: connection, flight_ref: Union[int, str]) -> Op
             scheduled_arrival=flight_row[14],
             actual_arrival=flight_row[15],
             status=flight_row[16],
-            departure_delay_minutes=flight_row[17] or 0,
-            arrival_delay_minutes=flight_row[18] or 0,
+            departure_delay_minutes=flight_row[17],
+            arrival_delay_minutes=flight_row[18],
             delay_category=flight_row[19],
             tail_number=flight_row[20],
             aircraft_type=flight_row[21],
         )
 
-        sched_dep = flight.scheduled_departure
+        ref_dep = flight.scheduled_departure or flight.actual_departure
+        ref_arr = flight.scheduled_arrival or flight.actual_arrival or ref_dep
 
         # 2. Fetch Relevant Weather Observations (Within +/- 3 hours of departure / arrival)
-        weather_sql = """
-            SELECT 
-                w.airport_id, a.iata_code, w.observation_time, w.temperature_c,
-                w.wind_speed_knots, w.wind_gust_knots, w.wind_direction_deg,
-                w.visibility_miles, w.altimeter_inhg, w.condition_code, w.raw_metar,
-                (w.airport_id = %s) AS is_origin
-            FROM weather_observations w
-            JOIN airports a ON w.airport_id = a.id
-            WHERE (w.airport_id = %s AND w.observation_time BETWEEN %s AND %s)
-               OR (w.airport_id = %s AND w.observation_time BETWEEN %s AND %s)
-            ORDER BY w.observation_time ASC;
-        """
-        cur.execute(weather_sql, (
-            flight.origin_airport_id,
-            flight.origin_airport_id, sched_dep - timedelta(hours=3), sched_dep + timedelta(hours=3),
-            flight.destination_airport_id, flight.scheduled_arrival - timedelta(hours=3), flight.scheduled_arrival + timedelta(hours=3),
-        ))
-        weather_rows = cur.fetchall()
+        weather_list = []
+        if ref_dep and (flight.origin_airport_id is not None or flight.destination_airport_id is not None):
+            weather_sql = """
+                SELECT 
+                    w.airport_id, a.iata_code, w.observation_time, w.temperature_c,
+                    w.wind_speed_knots, w.wind_gust_knots, w.wind_direction_deg,
+                    w.visibility_miles, w.altimeter_inhg, w.condition_code, w.raw_metar,
+                    (w.airport_id = %s) AS is_origin
+                FROM weather_observations w
+                JOIN airports a ON w.airport_id = a.id
+                WHERE (w.airport_id = %s AND w.observation_time BETWEEN %s AND %s)
+                   OR (w.airport_id = %s AND w.observation_time BETWEEN %s AND %s)
+                ORDER BY w.observation_time ASC;
+            """
+            cur.execute(weather_sql, (
+                flight.origin_airport_id,
+                flight.origin_airport_id, ref_dep - timedelta(hours=3), ref_dep + timedelta(hours=3),
+                flight.destination_airport_id, ref_arr - timedelta(hours=3), ref_arr + timedelta(hours=3),
+            ))
+            weather_rows = cur.fetchall()
 
-        weather_list = [
-            WeatherEvidence(
-                airport_id=row[0],
-                airport_code=row[1],
-                observation_time=row[2],
-                temperature_c=float(row[3]) if row[3] is not None else None,
-                wind_speed_knots=float(row[4]) if row[4] is not None else None,
-                wind_gust_knots=float(row[5]) if row[5] is not None else None,
-                wind_direction_deg=row[6],
-                visibility_miles=float(row[7]) if row[7] is not None else None,
-                altimeter_inhg=float(row[8]) if row[8] is not None else None,
-                condition_code=row[9] or "UNKNOWN",
-                raw_metar=row[10],
-                is_origin=bool(row[11]),
-            )
-            for row in weather_rows
-        ]
+            weather_list = [
+                WeatherEvidence(
+                    airport_id=row[0],
+                    airport_code=row[1],
+                    observation_time=row[2],
+                    temperature_c=float(row[3]) if row[3] is not None else None,
+                    wind_speed_knots=float(row[4]) if row[4] is not None else None,
+                    wind_gust_knots=float(row[5]) if row[5] is not None else None,
+                    wind_direction_deg=row[6],
+                    visibility_miles=float(row[7]) if row[7] is not None else None,
+                    altimeter_inhg=float(row[8]) if row[8] is not None else None,
+                    condition_code=row[9] or "UNKNOWN",
+                    raw_metar=row[10],
+                    is_origin=bool(row[11]),
+                )
+                for row in weather_rows
+            ]
 
         # 3. Fetch Relevant Disruptions & News Events
-        disruption_sql = """
-            SELECT 
-                n.id, n.title, n.summary, n.source, n.url, n.event_type, n.severity,
-                n.airport_id, a.iata_code, n.airline_id, al.iata_code,
-                n.start_time, n.end_time
-            FROM news_events n
-            LEFT JOIN airports a ON n.airport_id = a.id
-            LEFT JOIN airlines al ON n.airline_id = al.id
-            WHERE (
-                (n.airport_id = %s OR n.airport_id = %s OR n.airport_id IS NULL)
-                AND (n.airline_id = %s OR n.airline_id IS NULL)
-            )
-            AND n.start_time <= %s
-            AND (n.end_time IS NULL OR n.end_time >= %s)
-            ORDER BY n.start_time ASC;
-        """
-        cur.execute(disruption_sql, (
-            flight.origin_airport_id, flight.destination_airport_id,
-            flight.airline_id,
-            sched_dep + timedelta(hours=4),
-            sched_dep - timedelta(hours=4),
-        ))
-        disruption_rows = cur.fetchall()
+        disruption_list = []
+        if ref_dep:
+            disruption_sql = """
+                SELECT 
+                    n.id, n.title, n.summary, n.source, n.url, n.event_type, n.severity,
+                    n.airport_id, a.iata_code, n.airline_id, al.iata_code,
+                    n.start_time, n.end_time
+                FROM news_events n
+                LEFT JOIN airports a ON n.airport_id = a.id
+                LEFT JOIN airlines al ON n.airline_id = al.id
+                WHERE (
+                    (n.airport_id = %s OR n.airport_id = %s OR n.airport_id IS NULL)
+                    AND (n.airline_id = %s OR n.airline_id IS NULL)
+                )
+                AND n.start_time <= %s
+                AND (n.end_time IS NULL OR n.end_time >= %s)
+                ORDER BY n.start_time ASC;
+            """
+            cur.execute(disruption_sql, (
+                flight.origin_airport_id, flight.destination_airport_id,
+                flight.airline_id,
+                ref_dep + timedelta(hours=4),
+                ref_dep - timedelta(hours=4),
+            ))
+            disruption_rows = cur.fetchall()
 
         disruption_list = [
             DisruptionEvidence(

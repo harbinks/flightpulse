@@ -93,9 +93,9 @@ CREATE TRIGGER trg_airlines_updated_at
 CREATE TABLE IF NOT EXISTS flights (
     id BIGSERIAL PRIMARY KEY,
     flight_number VARCHAR(10) NOT NULL,
-    airline_id INT NOT NULL REFERENCES airlines(id) ON DELETE RESTRICT,
-    origin_airport_id INT NOT NULL REFERENCES airports(id) ON DELETE RESTRICT,
-    destination_airport_id INT NOT NULL REFERENCES airports(id) ON DELETE RESTRICT,
+    airline_id INT REFERENCES airlines(id) ON DELETE RESTRICT, -- Nullable for live ADS-B observations with unseeded/unknown carriers
+    origin_airport_id INT REFERENCES airports(id) ON DELETE RESTRICT, -- Nullable for unseeded origins
+    destination_airport_id INT REFERENCES airports(id) ON DELETE RESTRICT, -- Nullable for live ADS-B observations lacking destination or unseeded
     
     flight_date DATE NOT NULL,
     scheduled_departure TIMESTAMPTZ, -- Nullable for live ADS-B telemetry observations lacking published timetables

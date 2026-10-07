@@ -34,7 +34,7 @@ def build_flight_timeline(conn: connection, flight_id: int) -> Optional[FlightTi
             event_type="SCHEDULED_DEPARTURE",
             category="FLIGHT",
             title="Scheduled Departure",
-            detail=f"Scheduled departure from {flight.origin_iata} to {flight.destination_iata}",
+            detail=f"Scheduled departure from {flight.origin_iata or 'Origin'} to {flight.destination_iata or 'Destination'}",
             severity="INFO",
             source="FLIGHT_SCHEDULE",
         ))
@@ -47,7 +47,7 @@ def build_flight_timeline(conn: connection, flight_id: int) -> Optional[FlightTi
             event_type="ACTUAL_DEPARTURE",
             category="FLIGHT",
             title="Actual Departure",
-            detail=f"Aircraft departed {flight.origin_iata} ({dep_delay_str})",
+            detail=f"Aircraft departed {flight.origin_iata or 'Airspace'} ({dep_delay_str})",
             severity=sev,
             source="ACTUAL_OPERATIONS",
         ))
@@ -58,7 +58,7 @@ def build_flight_timeline(conn: connection, flight_id: int) -> Optional[FlightTi
             event_type="SCHEDULED_ARRIVAL",
             category="FLIGHT",
             title="Scheduled Arrival",
-            detail=f"Scheduled arrival at {flight.destination_iata}",
+            detail=f"Scheduled arrival at {flight.destination_iata or 'Destination'}",
             severity="INFO",
             source="FLIGHT_SCHEDULE",
         ))
@@ -69,7 +69,7 @@ def build_flight_timeline(conn: connection, flight_id: int) -> Optional[FlightTi
             event_type="ACTUAL_ARRIVAL",
             category="FLIGHT",
             title="Actual Arrival",
-            detail=f"Aircraft touched down and docked at {flight.destination_iata}",
+            detail=f"Aircraft touched down and docked at {flight.destination_iata or 'Destination'}",
             severity="INFO",
             source="ACTUAL_OPERATIONS",
         ))
