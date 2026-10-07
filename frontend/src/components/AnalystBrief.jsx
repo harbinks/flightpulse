@@ -112,6 +112,7 @@ export default function AnalystBrief({
       </div>
 
       {/* Offline / Fallback Advisory Banner (Shown when Ollama is offline or times out) */}
+      {/* Offline / Fallback Advisory Banner (Shown when Ollama is offline or times out) */}
       {(isOffline || isError) && (
         <div className="fp-analyst-offline-banner">
           <div className="fp-banner-icon-cell">
@@ -131,6 +132,23 @@ export default function AnalystBrief({
               RETRY LLM
             </button>
           )}
+        </div>
+      )}
+
+      {/* Live Telemetry Advisory Banner */}
+      {(primaryCause.includes('LIVE_TELEMETRY') || primaryCause.includes('INSUFFICIENT_EVIDENCE')) && (
+        <div className="fp-analyst-telemetry-banner">
+          <div className="fp-banner-icon-cell">
+            <Shield size={15} />
+          </div>
+          <div className="fp-banner-content">
+            <div className="fp-telemetry-advisory-title mono">
+              AI ANALYSIS LIMITED — LIVE ADS-B TELEMETRY
+            </div>
+            <div className="fp-telemetry-advisory-desc">
+              This record contains live ADS-B telemetry without commercial schedule or reported delay data. The analyst explains available radar and atmospheric facts but cannot establish a verified delay cause.
+            </div>
+          </div>
         </div>
       )}
 

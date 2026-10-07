@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, Radio, Database } from 'lucide-react';
 
-export default function Header({ systemHealth, onRefresh, loading }) {
+export default function Header({
+  systemHealth,
+  onRefresh,
+  loading,
+  mode = 'demo',
+  onModeChange,
+}) {
   const [utcTime, setUtcTime] = useState('');
 
   useEffect(() => {
@@ -31,6 +37,26 @@ export default function Header({ systemHealth, onRefresh, loading }) {
           <div className="fp-brand-desc">
             OPERATIONAL FLIGHT DELAY INTELLIGENCE & GROUNDED INVESTIGATION
           </div>
+        </div>
+
+        {/* DEMO / LIVE Mode Switcher */}
+        <div className="fp-mode-switcher" role="group" aria-label="Operational Mode">
+          <button
+            type="button"
+            className={`fp-mode-btn ${mode === 'demo' ? 'is-active' : ''} mono`}
+            onClick={() => onModeChange && onModeChange('demo')}
+            aria-pressed={mode === 'demo'}
+          >
+            DEMO
+          </button>
+          <button
+            type="button"
+            className={`fp-mode-btn mode-live ${mode === 'live' ? 'is-active' : ''} mono`}
+            onClick={() => onModeChange && onModeChange('live')}
+            aria-pressed={mode === 'live'}
+          >
+            LIVE
+          </button>
         </div>
       </div>
 

@@ -7,12 +7,14 @@ export default function FlightList({
   onSelectFlight,
   loading,
   error,
+  mode = 'demo',
+  onSync,
 }) {
   if (loading) {
     return (
       <div className="fp-list-state">
         <div className="fp-state-pulse"></div>
-        <span>POLLING FLIGHT ROSTER...</span>
+        <span>{mode === 'live' ? 'POLLING LIVE ADS-B TELEMETRY...' : 'POLLING FLIGHT ROSTER...'}</span>
       </div>
     );
   }
@@ -26,6 +28,20 @@ export default function FlightList({
   }
 
   if (!flights || flights.length === 0) {
+    if (mode === 'live') {
+      return (
+        <div className="fp-list-state fp-live-empty-state">
+          <span className="empty-title mono">NO LIVE TELEMETRY AVAILABLE</span>
+          <p className="empty-desc">OpenSky currently returned no usable live flight records for the configured airspace.</p>
+          {onSync && (
+            <button type="button" className="fp-empty-sync-btn mono" onClick={onSync}>
+              SYNC LIVE FEEDS
+            </button>
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="fp-list-state is-empty">
         <span>ZERO MATCHING OPERATIONS</span>
@@ -33,19 +49,23 @@ export default function FlightList({
     );
   }
 
+  const isLiveMode = mode === 'live';
+
   return (
     <div className="fp-flight-list" role="list">
       {flights.map((flight) => {
         const isSelected = flight.id === selectedFlightId;
-        const delayMins = flight.departure_delay_minutes || 0;
-        const isDelayed = delayMins > 15;
-        const isMinorDelay = delayMins > 0 && delayMins <= 15;
+        const isTelemetry = flight.data_source === 'OPENSKY_LIVE' || isLiveMode;
+        const delayMins = flight.departure_delay_minutes;
+        const hasDelay = delayMins != null;
+        const isDelayed = hasDelay && delayMins > 15;
+        const isMinorDelay = hasDelay && delayMins > 0 && delayMins <= 15;
 
         return (
           <div
             key={flight.id}
             role="listitem"
-            className={`fp-flight-strip ${isSelected ? 'is-selected' : ''}`}
+            className={`fp-flight-strip ${isSelected ? 'is-selected' : ''} ${isTelemetry ? 'is-telemetry' : ''}`}
             onClick={() => onSelectFlight(flight.id)}
             tabIndex={0}
             onKeyDown={(e) => {
@@ -56,20 +76,32 @@ export default function FlightList({
             }}
           >
             {/* Left strip status line indicator */}
-            <div className={`fp-strip-indicator ${isDelayed ? 'ind-delayed' : 'ind-ontime'}`}></div>
+            <div
+              className={`fp-strip-indicator ${
+                isTelemetry ? 'ind-telemetry' : isDelayed ? 'ind-delayed' : 'ind-ontime'
+              }`}
+            ></div>
 
             <div className="fp-strip-main">
               <div className="fp-strip-row-1">
                 <span className="fp-strip-ident mono">{flight.flight_number}</span>
-                <span className="fp-strip-airline">{flight.airline_name || 'Commercial'}</span>
-
-                <span
-                  className={`fp-strip-delay-badge mono ${
-                    isDelayed ? 'badge-delayed' : isMinorDelay ? 'badge-minor' : 'badge-ontime'
-                  }`}
-                >
-                  {isDelayed ? `+${delayMins} MIN` : isMinorDelay ? `+${delayMins}m` : 'ON-TIME'}
+                <span className="fp-strip-airline">
+                  {isTelemetry ? (flight.airline_name || 'ADS-B Track') : (flight.airline_name || 'Commercial')}
                 </span>
+
+                {isTelemetry ? (
+                  <span className="fp-strip-delay-badge badge-telemetry mono">
+                    LIVE ADS-B
+                  </span>
+                ) : (
+                  <span
+                    className={`fp-strip-delay-badge mono ${
+                      isDelayed ? 'badge-delayed' : isMinorDelay ? 'badge-minor' : 'badge-ontime'
+                    }`}
+                  >
+                    {isDelayed ? `+${delayMins} MIN` : isMinorDelay ? `+${delayMins}m` : 'ON-TIME'}
+                  </span>
+                )}
               </div>
 
               <div className="fp-strip-row-2">
@@ -80,13 +112,19 @@ export default function FlightList({
                 </div>
 
                 <div className="fp-strip-times mono">
-                  <span>{formatTimeUtc(flight.scheduled_departure)}</span>
-                  {flight.actual_departure && (
+                  {isTelemetry ? (
+                    <span>OBS: {formatTimeUtc(flight.actual_departure)}</span>
+                  ) : (
                     <>
-                      <span className="fp-times-sep">/</span>
-                      <span className={isDelayed ? 'text-delayed' : ''}>
-                        {formatTimeUtc(flight.actual_departure)}
-                      </span>
+                      <span>{formatTimeUtc(flight.scheduled_departure)}</span>
+                      {flight.actual_departure && (
+                        <>
+                          <span className="fp-times-sep">/</span>
+                          <span className={isDelayed ? 'text-delayed' : ''}>
+                            {formatTimeUtc(flight.actual_departure)}
+                          </span>
+                        </>
+                      )}
                     </>
                   )}
                 </div>
@@ -94,8 +132,15 @@ export default function FlightList({
 
               <div className="fp-strip-row-3">
                 <span className="fp-strip-date mono">{flight.flight_date}</span>
-                <span className="fp-strip-reported">
-                  {flight.delay_category ? `REP: ${flight.delay_category}` : `STATUS: ${flight.status}`}
+                <span className="fp-strip-provenance mono">
+                  {isTelemetry ? (
+                    `TAIL: ${flight.aircraft_type || flight.flight_number || 'UNKNOWN'}`
+                  ) : (
+                    flight.delay_category ? `REP: ${flight.delay_category}` : `STATUS: ${flight.status}`
+                  )}
+                </span>
+                <span className={`fp-provenance-tag mono ${isTelemetry ? 'tag-live' : 'tag-demo'}`}>
+                  {isTelemetry ? 'LIVE ADS-B' : 'DEMO BENCHMARK'}
                 </span>
               </div>
             </div>

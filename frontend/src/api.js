@@ -27,15 +27,34 @@ export async function fetchHealth() {
   }
 }
 
-export async function fetchFlights({ flightNumber = '', origin = '', delayStatus = '', limit = 50 } = {}) {
+export async function fetchFlights({
+  flightNumber = '',
+  origin = '',
+  delayStatus = '',
+  mode = 'demo',
+  limit = 50,
+} = {}) {
   const params = new URLSearchParams();
   if (flightNumber) params.append('flight_number', flightNumber.trim());
   if (origin) params.append('origin', origin.trim().toUpperCase());
   if (delayStatus) params.append('delay_status', delayStatus);
+  if (mode) params.append('mode', mode.toLowerCase());
   params.append('limit', String(limit));
 
   const res = await fetch(`${API_BASE}/flights?${params.toString()}`);
   return handleResponse(res, 'Fetch flights');
+}
+
+export async function fetchOperationsStatus() {
+  const res = await fetch(`${API_BASE}/operations/status`);
+  return handleResponse(res, 'Fetch operations status');
+}
+
+export async function syncLiveFeeds(dryRun = false) {
+  const res = await fetch(`${API_BASE}/operations/sync?mode=live${dryRun ? '&dry_run=true' : ''}`, {
+    method: 'POST',
+  });
+  return handleResponse(res, 'Sync live feeds');
 }
 
 export async function fetchFlightDetail(id) {
@@ -102,3 +121,26 @@ export function formatDateTimeUtc(isoStr) {
     return isoStr;
   }
 }
+
+/**
+ * Format ISO datetime into concise relative elapsed time (e.g. "18s ago", "2m ago", "1h ago").
+ */
+export function formatRelativeTime(isoStr) {
+  if (!isoStr) return 'NEVER SYNCED';
+  try {
+    const d = new Date(isoStr);
+    const now = new Date();
+    const diffSec = Math.floor((now.getTime() - d.getTime()) / 1000);
+    if (diffSec < 0 || isNaN(diffSec)) return 'JUST NOW';
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDays = Math.floor(diffHr / 24);
+    return `${diffDays}d ago`;
+  } catch {
+    return '—';
+  }
+}
+

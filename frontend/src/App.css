@@ -1880,3 +1880,405 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   Phase 10.4: Live Operations UI Styles
+   Aviation Operations Room + Technical Provenance + Editorial Precision
+   ========================================================================== */
+
+/* Mode Switcher in Header */
+.fp-mode-switcher {
+  display: flex;
+  align-items: center;
+  background-color: var(--surface-inset);
+  border: 1px solid var(--border-medium);
+  border-radius: 2px;
+  padding: 2px;
+  margin-left: 8px;
+  gap: 2px;
+}
+
+.fp-mode-btn {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.15s ease;
+}
+
+.fp-mode-btn:hover {
+  color: var(--text-primary);
+}
+
+.fp-mode-btn.is-active {
+  background-color: var(--surface-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 1px 2px rgba(17, 22, 27, 0.05);
+}
+
+.fp-mode-btn.mode-live.is-active {
+  background-color: var(--accent-amber);
+  color: #ffffff;
+  border: 1px solid var(--accent-amber);
+}
+
+/* Operations Ribbon */
+.fp-operations-ribbon {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--surface-card);
+  border-bottom: 1px solid var(--border-medium);
+  padding: 8px 24px;
+  min-height: 40px;
+  z-index: 9;
+}
+
+.fp-ribbon-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.fp-ribbon-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
+}
+
+.status-live-pulse {
+  color: var(--accent-amber);
+}
+
+.fp-ribbon-divider {
+  width: 1px;
+  height: 16px;
+  background-color: var(--border-medium);
+}
+
+.fp-ribbon-sources {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.fp-ribbon-source-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.fp-source-name {
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+}
+
+.fp-source-dot {
+  font-size: 9px;
+  line-height: 1;
+}
+
+.fp-source-dot.status-ok {
+  color: var(--status-ontime);
+}
+
+.fp-source-dot.status-failed {
+  color: var(--status-delay);
+}
+
+.fp-source-dot.status-partial {
+  color: var(--accent-yellow);
+}
+
+.fp-source-dot.status-neutral {
+  color: var(--text-faint);
+}
+
+.fp-source-status {
+  font-weight: 700;
+}
+
+.fp-source-status.status-ok {
+  color: var(--status-ontime);
+}
+
+.fp-source-status.status-failed {
+  color: var(--status-delay);
+}
+
+.fp-source-status.status-partial {
+  color: var(--accent-yellow);
+}
+
+.fp-source-status.status-neutral {
+  color: var(--text-muted);
+}
+
+.fp-source-freshness {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.fp-ribbon-source-sep {
+  color: var(--border-strong);
+  font-size: 10px;
+}
+
+.fp-ribbon-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.fp-ribbon-last-sync {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  gap: 6px;
+}
+
+.last-sync-label {
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.last-sync-time {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.fp-sync-feeds-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 5px 12px;
+  border: 1px solid var(--accent-amber);
+  background-color: var(--accent-amber);
+  color: #ffffff;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.fp-sync-feeds-btn:hover:not(:disabled) {
+  background-color: var(--accent-amber-hover);
+  border-color: var(--accent-amber-hover);
+}
+
+.fp-sync-feeds-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.fp-sync-result-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 2px;
+}
+
+.fp-sync-result-badge.result-success {
+  background-color: var(--status-ontime-bg);
+  color: var(--status-ontime);
+  border: 1px solid var(--status-ontime);
+}
+
+.fp-sync-result-badge.result-partial {
+  background-color: var(--accent-yellow-tint);
+  color: var(--accent-yellow);
+  border: 1px solid var(--accent-yellow);
+}
+
+.fp-sync-result-badge.result-failed {
+  background-color: var(--status-delay-bg);
+  color: var(--status-delay);
+  border: 1px solid var(--status-delay);
+}
+
+.fp-sync-result-badge.result-conflict {
+  background-color: var(--surface-panel-alt);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+}
+
+.fp-ribbon-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--status-delay);
+}
+
+.fp-ribbon-retry-btn {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border: 1px solid var(--status-delay);
+  background: transparent;
+  color: var(--status-delay);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+/* Live ADS-B Telemetry Badges & Styling */
+.fp-strip-indicator.ind-telemetry {
+  background-color: var(--accent-amber);
+}
+
+.badge-telemetry {
+  background-color: var(--accent-amber-tint);
+  color: var(--accent-amber);
+  border: 1px solid var(--accent-amber);
+}
+
+.fp-provenance-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  border-radius: 2px;
+  margin-left: auto;
+}
+
+.fp-provenance-tag.tag-live {
+  background-color: var(--accent-amber-tint);
+  color: var(--accent-amber);
+  border: 1px solid var(--accent-amber);
+}
+
+.fp-provenance-tag.tag-demo {
+  background-color: var(--surface-inset);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-medium);
+}
+
+.fp-flight-strip.is-telemetry:hover {
+  border-left-color: var(--accent-amber);
+}
+
+.fp-provenance-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.fp-provenance-badge.badge-live {
+  background-color: var(--accent-amber);
+  color: #ffffff;
+}
+
+.fp-provenance-badge.badge-demo {
+  background-color: var(--surface-inset);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-medium);
+}
+
+.fp-delay-metric-callout.is-telemetry {
+  border: 1px solid var(--border-medium);
+  background-color: var(--surface-card-subtle);
+}
+
+.fp-delay-metric-callout.is-telemetry .fp-delay-metric-val {
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+/* Empty State in Live Mode */
+.fp-live-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  text-align: center;
+  gap: 12px;
+}
+
+.fp-live-empty-state .empty-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+}
+
+.fp-live-empty-state .empty-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  max-width: 260px;
+}
+
+.fp-empty-sync-btn {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 6px 14px;
+  background-color: var(--accent-amber);
+  color: #ffffff;
+  border: 1px solid var(--accent-amber);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.fp-empty-sync-btn:hover {
+  background-color: var(--accent-amber-hover);
+}
+
+/* Live Telemetry Advisory in Analyst Panel */
+.fp-analyst-telemetry-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 16px;
+  background-color: var(--surface-card-subtle);
+  border-bottom: 1px solid var(--border-medium);
+  color: var(--text-secondary);
+}
+
+.fp-telemetry-advisory-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.fp-telemetry-advisory-desc {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 860px) {
+  .fp-operations-ribbon {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 12px 16px;
+  }
+  .fp-ribbon-right {
+    justify-content: space-between;
+  }
+}
+

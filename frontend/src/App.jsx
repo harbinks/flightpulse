@@ -8,9 +8,12 @@ import FlightTimeline from './components/FlightTimeline';
 import WeatherPanel from './components/WeatherPanel';
 import DisruptionPanel from './components/DisruptionPanel';
 import CandidateBreakdown from './components/CandidateBreakdown';
+import OperationsRibbon from './components/OperationsRibbon';
 import {
   fetchHealth,
   fetchFlights,
+  fetchOperationsStatus,
+  syncLiveFeeds,
   fetchFlightDetail,
   fetchFlightIntelligence,
   fetchFlightTimeline,
@@ -22,8 +25,18 @@ import './App.css';
 import { Activity, Clock, Cloud, Layers } from 'lucide-react';
 
 export default function App() {
+  // Operational Mode State: 'demo' (default) or 'live'
+  const [mode, setMode] = useState('demo');
+
   // System Health
   const [systemHealth, setSystemHealth] = useState(null);
+
+  // Operations Status & Synchronization State
+  const [operationsStatus, setOperationsStatus] = useState(null);
+  const [operationsLoading, setOperationsLoading] = useState(false);
+  const [operationsError, setOperationsError] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null); // { type: 'success' | 'partial' | 'failed' | 'conflict', message: '...' }
 
   // Flight Directory State
   const [flights, setFlights] = useState([]);
@@ -67,8 +80,32 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // 2. Fetch Flights Directory
-  const loadFlights = async (selectedIdToPreserve = null) => {
+  // 2. Operations Status Polling (Active ONLY in LIVE mode)
+  const loadOperationsStatus = async () => {
+    setOperationsLoading(true);
+    try {
+      setOperationsError(null);
+      const data = await fetchOperationsStatus();
+      setOperationsStatus(data);
+    } catch (err) {
+      console.warn('Failed loading operations status:', err);
+      setOperationsError(err.message || 'Status unavailable');
+    } finally {
+      setOperationsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (mode === 'live') {
+      loadOperationsStatus();
+      const interval = setInterval(loadOperationsStatus, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [mode]);
+
+  // 3. Fetch Flights Directory
+  const loadFlights = async (selectedIdToPreserve = null, overrideMode = null) => {
+    const activeMode = overrideMode || mode;
     setFlightsLoading(true);
     setFlightsError(null);
     try {
@@ -76,6 +113,7 @@ export default function App() {
         flightNumber: flightNumberFilter,
         origin: originFilter,
         delayStatus: delayStatusFilter,
+        mode: activeMode,
         limit: 50,
       });
 
@@ -102,9 +140,57 @@ export default function App() {
     }
   };
 
+  // Reload flights when mode or delayStatusFilter changes
   useEffect(() => {
-    loadFlights();
-  }, [delayStatusFilter]);
+    loadFlights(null, mode);
+  }, [mode, delayStatusFilter]);
+
+  // Handle Mode Switch (DEMO <-> LIVE)
+  const handleModeChange = (newMode) => {
+    if (newMode === mode) return;
+    setMode(newMode);
+    setSelectedFlightId(null);
+    setFlightDetail(null);
+    setIntelligence(null);
+    setTimeline(null);
+    setWeather(null);
+    setDisruptions(null);
+    setAiAnalysis(null);
+    setSyncResult(null);
+  };
+
+  // Handle On-Demand Live Synchronization
+  const handleSyncFeeds = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await syncLiveFeeds();
+      const st = res.overall_status || res.status;
+      if (st === 'SUCCESS') {
+        setSyncResult({ type: 'success', message: 'LIVE FEEDS UPDATED' });
+      } else if (st === 'PARTIAL') {
+        setSyncResult({ type: 'partial', message: 'LIVE SYNC PARTIAL' });
+      } else {
+        setSyncResult({ type: 'failed', message: 'LIVE SYNC FAILED' });
+      }
+
+      // Refresh operations status and flights list
+      await Promise.all([
+        loadOperationsStatus(),
+        loadFlights(selectedFlightId, 'live'),
+      ]);
+    } catch (err) {
+      console.warn('Sync live feeds error:', err);
+      if (err.message && err.message.includes('409')) {
+        setSyncResult({ type: 'conflict', message: 'SYNC ALREADY IN PROGRESS' });
+      } else {
+        setSyncResult({ type: 'failed', message: 'LIVE SYNC FAILED' });
+      }
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -228,7 +314,22 @@ export default function App() {
         systemHealth={systemHealth}
         onRefresh={() => loadFlights(selectedFlightId)}
         loading={flightsLoading}
+        mode={mode}
+        onModeChange={handleModeChange}
       />
+
+      {/* Live Operations Ribbon (rendered only when LIVE mode is active) */}
+      {mode === 'live' && (
+        <OperationsRibbon
+          operationsStatus={operationsStatus}
+          loading={operationsLoading}
+          error={operationsError}
+          syncing={syncing}
+          syncResult={syncResult}
+          onSync={handleSyncFeeds}
+          onRetryStatus={loadOperationsStatus}
+        />
+      )}
 
       {/* Main Operations Split View */}
       <div className="fp-operations-layout">
@@ -247,7 +348,7 @@ export default function App() {
           />
 
           <div className="fp-roster-header mono">
-            <span>OPERATIONAL FLIGHT DIRECTORY</span>
+            <span>{mode === 'live' ? 'LIVE ADS-B ROSTER' : 'OPERATIONAL FLIGHT DIRECTORY'}</span>
             <span>{flights.length} LOADED</span>
           </div>
 
@@ -257,6 +358,8 @@ export default function App() {
             onSelectFlight={(id) => setSelectedFlightId(id)}
             loading={flightsLoading}
             error={flightsError}
+            mode={mode}
+            onSync={handleSyncFeeds}
           />
         </aside>
 

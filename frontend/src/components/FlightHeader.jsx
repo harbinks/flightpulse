@@ -5,26 +5,47 @@ import { Plane, AlertOctagon, ShieldCheck } from 'lucide-react';
 export default function FlightHeader({ flight, intelligence }) {
   if (!flight) return null;
 
-  const delayMins = flight.departure_delay_minutes || 0;
-  const isDelayed = delayMins > 15;
+  const isTelemetry = flight.data_source === 'OPENSKY_LIVE';
+  const delayMins = flight.departure_delay_minutes;
+  const hasDelay = delayMins != null;
+  const isDelayed = hasDelay && delayMins > 15;
   const primaryCandidate = intelligence?.primary_candidate;
 
-  const reportedCategory = flight.delay_category || 'NOT REPORTED / NONE';
-  const assessedCategory = primaryCandidate?.category || 'EVALUATING...';
-  const assessedConfidence = primaryCandidate?.confidence || 'PENDING';
-  const assessedScore = primaryCandidate?.score != null ? Math.round(primaryCandidate.score * 100) : null;
+  const reportedCategory = isTelemetry
+    ? 'NONE (LIVE ADS-B TELEMETRY)'
+    : (flight.delay_category || 'NOT REPORTED / NONE');
+
+  const assessedCategory = isTelemetry
+    ? 'INSUFFICIENT EVIDENCE (LIVE TELEMETRY)'
+    : (primaryCandidate?.category || 'EVALUATING...');
+
+  const assessedConfidence = isTelemetry
+    ? 'INSUFFICIENT'
+    : (primaryCandidate?.confidence || 'PENDING');
+
+  const assessedScore = (!isTelemetry && primaryCandidate?.score != null)
+    ? Math.round(primaryCandidate.score * 100)
+    : null;
 
   return (
-    <div className="fp-investigation-banner">
+    <div className={`fp-investigation-banner ${isTelemetry ? 'is-telemetry-banner' : ''}`}>
       {/* Top Bar: Callsign, Carrier & Aircraft */}
       <div className="fp-banner-meta-bar">
         <div className="fp-banner-ident">
           <span className="fp-ident-code mono">{flight.flight_number}</span>
-          <span className="fp-ident-carrier">{flight.airline_name || 'Commercial Operator'}</span>
-          <span className="fp-ident-aircraft mono">{flight.aircraft_type || 'A320 / B737'}</span>
+          <span className="fp-ident-carrier">
+            {isTelemetry ? (flight.airline_name || 'ADS-B Track') : (flight.airline_name || 'Commercial Operator')}
+          </span>
+          <span className="fp-ident-aircraft mono">
+            {isTelemetry ? (flight.tail_number ? `ICAO24: ${flight.tail_number}` : 'ADS-B') : (flight.aircraft_type || 'A320 / B737')}
+          </span>
         </div>
         <div className="fp-banner-date mono">
-          FLIGHT DATE: {flight.flight_date} • STATUS: {flight.status?.toUpperCase()}
+          <span className={`fp-provenance-badge ${isTelemetry ? 'badge-live' : 'badge-demo'}`}>
+            {isTelemetry ? 'OBSERVED FLIGHT • LIVE ADS-B TELEMETRY' : 'DEMO BENCHMARK DATASET'}
+          </span>
+          {' • '}
+          STATUS: {flight.status?.toUpperCase()}
         </div>
       </div>
 
@@ -41,7 +62,9 @@ export default function FlightHeader({ flight, intelligence }) {
             <div className="fp-trajectory-line">
               <Plane size={16} className="fp-plane-icon" />
             </div>
-            <span className="fp-trajectory-label mono">NON-STOP PASSENGER SECTOR</span>
+            <span className="fp-trajectory-label mono">
+              {isTelemetry ? 'ADS-B TELEMETRY TRACK' : 'NON-STOP PASSENGER SECTOR'}
+            </span>
           </div>
 
           <div className="fp-station-cell destination">
@@ -51,13 +74,29 @@ export default function FlightHeader({ flight, intelligence }) {
         </div>
 
         {/* Departure Delay Magnitude Callout */}
-        <div className={`fp-delay-metric-callout ${isDelayed ? 'is-delayed' : 'is-ontime'}`}>
-          <div className="fp-delay-metric-label">DEPARTURE TIMING</div>
+        <div
+          className={`fp-delay-metric-callout ${
+            isTelemetry ? 'is-telemetry' : isDelayed ? 'is-delayed' : 'is-ontime'
+          }`}
+        >
+          <div className="fp-delay-metric-label">
+            {isTelemetry ? 'COMMERCIAL DELAY' : 'DEPARTURE TIMING'}
+          </div>
           <div className="fp-delay-metric-val mono">
-            {isDelayed ? `+${delayMins} MIN` : delayMins > 0 ? `+${delayMins}m` : 'ON SCHEDULE'}
+            {isTelemetry
+              ? 'NOT AVAILABLE'
+              : isDelayed
+              ? `+${delayMins} MIN`
+              : hasDelay && delayMins > 0
+              ? `+${delayMins}m`
+              : 'ON SCHEDULE'}
           </div>
           <div className="fp-delay-metric-sub mono">
-            {isDelayed ? 'SUBSTANTIAL OPERATION DELAY' : 'NORMAL SCHEDULE TOLERANCE'}
+            {isTelemetry
+              ? 'NO PUBLISHED SCHEDULE RECORD'
+              : isDelayed
+              ? 'SUBSTANTIAL OPERATION DELAY'
+              : 'NORMAL SCHEDULE TOLERANCE'}
           </div>
         </div>
       </div>
@@ -66,20 +105,28 @@ export default function FlightHeader({ flight, intelligence }) {
       <div className="fp-schedule-matrix">
         <div className="fp-matrix-cell">
           <span className="fp-cell-label">SCHEDULED DEPARTURE</span>
-          <span className="fp-cell-val mono">{formatDateTimeUtc(flight.scheduled_departure)}</span>
+          <span className="fp-cell-val mono">
+            {flight.scheduled_departure ? formatDateTimeUtc(flight.scheduled_departure) : 'NOT AVAILABLE'}
+          </span>
         </div>
         <div className="fp-matrix-cell">
-          <span className="fp-cell-label">ACTUAL DEPARTURE</span>
+          <span className="fp-cell-label">
+            {isTelemetry ? 'OBSERVED DEPARTURE (FIRST SEEN)' : 'ACTUAL DEPARTURE'}
+          </span>
           <span className={`fp-cell-val mono ${isDelayed ? 'text-delayed' : ''}`}>
             {formatDateTimeUtc(flight.actual_departure)}
           </span>
         </div>
         <div className="fp-matrix-cell">
           <span className="fp-cell-label">SCHEDULED ARRIVAL</span>
-          <span className="fp-cell-val mono">{formatDateTimeUtc(flight.scheduled_arrival)}</span>
+          <span className="fp-cell-val mono">
+            {flight.scheduled_arrival ? formatDateTimeUtc(flight.scheduled_arrival) : 'NOT AVAILABLE'}
+          </span>
         </div>
         <div className="fp-matrix-cell">
-          <span className="fp-cell-label">ACTUAL ARRIVAL</span>
+          <span className="fp-cell-label">
+            {isTelemetry ? 'OBSERVED ARRIVAL (LAST SEEN)' : 'ACTUAL ARRIVAL'}
+          </span>
           <span className="fp-cell-val mono">{formatDateTimeUtc(flight.actual_arrival)}</span>
         </div>
       </div>
@@ -95,7 +142,9 @@ export default function FlightHeader({ flight, intelligence }) {
           <div className="fp-box-body">
             <div className="fp-claim-badge mono">{reportedCategory}</div>
             <p className="fp-box-note">
-              Self-reported by airline dispatch for regulatory billing & delay categorization. Often uncorroborated by independent atmospheric data.
+              {isTelemetry
+                ? 'No airline dispatch reason exists for raw ADS-B transponder observations. Transponder data captures physical flight movement only.'
+                : 'Self-reported by airline dispatch for regulatory billing & delay categorization. Often uncorroborated by independent atmospheric data.'}
             </p>
           </div>
         </div>
@@ -119,7 +168,9 @@ export default function FlightHeader({ flight, intelligence }) {
               </div>
             </div>
             <p className="fp-box-note">
-              Inferred through multi-signal correlation across airport METAR telemetry, FAA Ground Stop advisories, and gate time delta.
+              {isTelemetry
+                ? 'Deterministic causal attribution requires a published scheduled departure time to calculate delay delta. Live ADS-B records operate in telemetry-only observation mode.'
+                : 'Inferred through multi-signal correlation across airport METAR telemetry, FAA Ground Stop advisories, and gate time delta.'}
             </p>
           </div>
         </div>
