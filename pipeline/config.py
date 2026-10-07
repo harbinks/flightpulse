@@ -15,9 +15,28 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(dotenv_path=BASE_DIR / ".env")
 
 
+def _normalize_database_url(raw_url: str) -> str:
+    """Safely ensure the password component of DATABASE_URL is percent-encoded."""
+    if not raw_url:
+        return ""
+    try:
+        from urllib.parse import quote, unquote
+        if "://" in raw_url and "@" in raw_url:
+            scheme, remainder = raw_url.split("://", 1)
+            creds, host_and_rest = remainder.split("@", 1)
+            if ":" in creds:
+                user, password = creds.split(":", 1)
+                # Unquote in case partly encoded, then fully quote special chars
+                encoded_password = quote(unquote(password), safe="")
+                return f"{scheme}://{user}:{encoded_password}@{host_and_rest}"
+    except Exception:
+        pass
+    return raw_url
+
+
 @dataclass(frozen=True)
 class DatabaseConfig:
-    url: str = os.getenv("DATABASE_URL", "")
+    url: str = _normalize_database_url(os.getenv("DATABASE_URL", ""))
     host: str = os.getenv("DB_HOST", os.getenv("DATABASE_HOST", "localhost"))
     port: int = int(os.getenv("DB_PORT", os.getenv("DATABASE_PORT", "5432")))
     name: str = os.getenv("DB_NAME", os.getenv("DATABASE_NAME", "flightpulse"))
