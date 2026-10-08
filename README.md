@@ -1,189 +1,215 @@
 # FlightPulse
 
-### Understanding why flights get delayed — with data, evidence, and grounded AI.
-
-I built FlightPulse because flight delays are usually explained with a single label — weather, carrier, late aircraft, etc. — even though the real operational picture is often more complicated. 
-
-When your flight sits on the tarmac for two hours, the airline app might simply say "Late Inbound Aircraft." But why was that inbound aircraft late? Did convective thunderstorms at Chicago O'Hare trigger an FAA Ground Delay Program? Did crosswinds exceed runway operating limits? Or was there an ATC staffing ground stop?
-
-FlightPulse is an aviation intelligence platform that ingests live and historical flight telemetry, high-resolution airport weather observations, and National Airspace System (NAS) disruption notices. It feeds them through a deterministic intelligence engine to deduce candidate causes, evaluate supporting evidence, calculate confidence tiers, and then uses a local, grounded AI analyst to explain the operational chain of events — without hallucinating facts.
+FlightPulse is an aviation operations and delay intelligence system that reconstructs why flights get delayed using multi-source operational data, weather observations, and National Airspace System (NAS) disruption feeds.
 
 ---
 
-## Architecture Overview
+## Live Demo
 
-FlightPulse is structured around strict data provenance and causal attribution:
+- **Web Dashboard**: [https://flightpulse-psi.vercel.app/](https://flightpulse-psi.vercel.app/)
+- **API Documentation**: [https://flightpulse-51i5.onrender.com/docs](https://flightpulse-51i5.onrender.com/docs)
+- **Source Code**: [https://github.com/harbinks/flightpulse](https://github.com/harbinks/flightpulse)
+
+> **Note on Deployed Behavior**: The public web deployment runs the deterministic intelligence engine in full. The optional LLM analyst uses Ollama (`llama3:latest`) and is designed to run locally; when Ollama is offline (such as on cloud container hosting), the interface presents the complete deterministic attribution and clearly reports that the local AI analyst is unavailable.
+
+---
+
+## What FlightPulse Does
+
+Most flight trackers and airline apps only report a surface label: *"Delayed — 105 min"* or *"Late Inbound Aircraft."* They tell you that a delay happened, but rarely explain the operational chain of events behind it.
+
+FlightPulse investigates the delay by cross-referencing multiple independent data sources:
+- **Carrier-Reported Reason**: What the airline or dispatch system filed (e.g., `WEATHER`, `NAS`, `CARRIER`).
+- **Deterministic FlightPulse Attribution**: What the evidence actually supports based on correlated weather readings, ground stops, and timing windows.
+- **Supporting Evidence**: Concrete observations (wind gusts, cloud ceilings, ground stop issuance times, gate pushback records).
+- **Confidence Rating**: An evidence-based rating (`HIGH`, `MEDIUM`, `LOW`, or `INSUFFICIENT`) reflecting data density and alignment.
+
+---
+
+## Example Investigation
+
+Consider the benchmark scenario for **United Airlines flight UA415** from Chicago O'Hare (`ORD`) to Denver (`DEN`):
+
+- **Scheduled Departure**: 14:30 UTC
+- **Actual Departure**: 16:15 UTC
+- **Departure Delay**: +105 minutes
+- **Carrier-Reported Reason**: `WEATHER`
+
+### Operational Timeline Reconstruction
 
 ```
-                      +-----------------------------------------+
-                      |               External Feeds            |
-                      |  - OpenSky Network (ADS-B Telemetry)    |
-                      |  - Open-Meteo (METAR / Atmospheric)     |
-                      |  - FAA NAS Status (Ground Stops / GDP)  |
-                      +--------------------+--------------------+
-                                           |
-                                           v
-                      +-----------------------------------------+
-                      |         Python ETL Orchestrator         |
-                      |   (Fault-isolated concurrent branches)  |
-                      +--------------------+--------------------+
-                                           |
-                                           v
-                      +-----------------------------------------+
-                      |           PostgreSQL Database           |
-                      | (Relational store with DEMO/LIVE split) |
-                      +--------------------+--------------------+
-                                           |
-                                           v
-                      +-----------------------------------------+
-                      | Deterministic Delay Intelligence Engine |
-                      |    (Scoring, Candidates & Attribution)  |
-                      +--------------------+--------------------+
-                                           |
-                                           v
-                      +-----------------------------------------+
-                      |            FastAPI API Layer            |
-                      |    (REST Endpoints, Operations Audit)   |
-                      +--------------------+--------------------+
-                                           |
-                                           v
-                      +-----------------------------------------+
-                      |         React / Vite Dashboard          |
-                      |   (Dual-mode: DEMO vs LIVE telemetry)   |
-                      +--------------------+--------------------+
-                                           |
-                                           v
-                      +-----------------------------------------+
-                      |      Ollama Local AI Analyst (LLM)      |
-                      | (Strictly grounded on structured facts) |
-                      +-----------------------------------------+
+14:00 UTC ── FAA ATCSCC issues Ground Delay Program for Chicago Center (ZAU) airspace
+14:15 UTC ── FAA issues full Ground Stop for ORD departures (convective storms)
+14:20 UTC ── Airline dispatch posts initial 60-minute delay citing FAA Ground Stop
+14:30 UTC ── Scheduled departure time passes with aircraft holding at gate C22
+14:51 UTC ── METAR KORD reports +TSRA (Thunderstorm), peak gust 42 kts, visibility 2.5 SM
+15:15 UTC ── Ground stop extended; delay revised to 105 minutes
+16:00 UTC ── FAA Ground Stop lifted
+16:15 UTC ── UA415 pushes back from gate C22 and commences taxi (+105 min delay)
 ```
 
----
+### Deterministic Engine Output
 
-## Why This Project Matters
+- **Primary Attribution**: `ATC / WEATHER INTERACTION`
+- **Confidence**: `HIGH` (Score: `1.00`)
+- **Ranked Candidates**:
+  1. `ATC / WEATHER INTERACTION` (Score: 1.00, Confidence: HIGH)
+  2. `ATC` (Score: 0.90, Confidence: HIGH)
+  3. `WEATHER` (Score: 0.85, Confidence: HIGH)
+- **Explanation**: Flight delay of 105 minutes strongly correlates with an Air Traffic Control restriction (Ground Stop / GDP) compounded by severe convective weather conditions at the origin airport.
 
-FlightPulse is an end-to-end engineering demonstration of:
-- **Resilient Data Pipelines**: Multi-source Python ETL with fault isolation, bounded exponential backoff, rate-limit awareness, and idempotent upserts.
-- **Data Provenance & Integrity**: Strict separation between curated benchmark scenarios (`DEMO`, `FLIGHTAWARE`, `FIXTURE_REPLAY`) and raw observations (`OPENSKY_LIVE`).
-- **Telemetry Semantics**: Never fabricating commercial flight schedules or delay minutes when only raw transponder pings exist.
-- **Deterministic-First AI**: A rule-based scoring and candidate generation engine acts as the authoritative source of truth. The LLM explains the evidence rather than inventing it.
-- **Production-Grade Full Stack**: High-throughput PostgreSQL data models, performant FastAPI asynchronous endpoints, and a responsive editorial-style React operations dashboard.
-
----
-
-## Core System Capabilities
-
-### 1. Multi-Source Ingestion & Fault Isolation
-- **OpenSky Network REST API**: ADS-B transponder telemetry for airport departures.
-- **Open-Meteo API**: Coordinate-based surface weather observations including temperature, dew point, wind speed, gust velocities, visibility, surface pressure, and WMO weather codes.
-- **FAA ATCSCC Feed**: Real-time National Airspace System advisories, ground stops, ground delay programs (GDP), and airport arrival acceptance rates.
-- **Fault-Isolated Orchestration**: The orchestrator runs these pipelines concurrently. If one external service fails or is rate-limited, the other sources continue and complete normally.
-
-### 2. Deterministic Flight Delay Intelligence Engine
-Instead of asking an AI model to guess why a flight was delayed, the deterministic engine runs verifiable heuristics:
-- **Correlated Weather Assessment**: Checks wind speed against operational crosswind thresholds (>25 kts), visibility limitations (<3 miles), and convective thunderstorms.
-- **NAS Disruption Cross-Referencing**: Correlates active ground stops and ground delay programs overlapping departure/arrival time windows.
-- **Carrier & Turnaround Signals**: Evaluates turnaround buffers and aircraft arrival delays.
-- **Attribution Tiers**: Assigns primary candidate causes (e.g., `ATC / WEATHER INTERACTION`, `SEVERE_WEATHER`, `CARRIER_LOGISTICS`) with explicit confidence ratings (`HIGH`, `MEDIUM`, `LOW`).
-
-### 3. Grounded Local AI Analyst
-- Integrates with local **Ollama (`llama3:latest`)**.
-- Uses structured prompts containing only the verified evidence bundle (flight details, METAR readings, FAA events, candidate breakdown).
-- Guided by strict system constraints: no invented weather, no hallucinated airline reasons, and honest explanations when evidence is insufficient.
-
-### 4. DEMO Mode vs. LIVE Operations Mode
-- **DEMO Mode**: Runs against a curated benchmark dataset (including benchmark scenario `UA415` departing KORD during severe convective weather and ground stops). Ensures repeatable, reliable demonstrations and automated test verification.
-- **LIVE Operations Mode**: Switched via the top navigation bar. Pulls real ADS-B telemetry, live METAR weather, and active FAA advisories with dedicated operational freshness indicators in the live ribbon.
+*Note: FlightPulse provides evidence-based deterministic attribution and correlation, not absolute statistical proof of causality.*
 
 ---
 
-## Live Data Status & Upstream Rate Limiting
+## How It Works
 
-FlightPulse is built to handle real-world aviation APIs honestly:
-- The live pipeline accepts real OpenSky ADS-B observations.
-- Unknown regional airlines or unseeded destination airports are stored with `airline_id = NULL` or `destination_airport_id = NULL` rather than fabricating dummy entities.
-- Commercial schedules, delay minutes, and delay categories are left `NULL` for telemetry-only observations.
-- **Upstream Rate Limit Note**: During project validation, the unauthenticated anonymous OpenSky API tier returned `HTTP 429: Too Many Requests` (`X-Rate-Limit-Retry-After-Seconds: ~80603s`, indicating ~22.4 hours remaining on the shared anonymous IP quota).
-- Rather than manufacturing fake live data, FlightPulse handles this transparently:
-  - The orchestrator traps `OpenSkyRateLimitError` and logs `RATE_LIMITED`.
-  - Operations sync status reports `PARTIAL` (weather and FAA feeds succeeded).
-  - The live UI displays `OPENSKY ● RATE LIMITED` and `OPERATIONAL STATUS: PARTIAL`.
-- Supplying authenticated OpenSky credentials (`OPENSKY_USERNAME`, `OPENSKY_PASSWORD`) or running after quota reset immediately enables full live ingestion.
+```
+  +--------------------------------------------------------------+
+  |                        External Data                         |
+  |   OpenSky (ADS-B)  ·  Open-Meteo (METAR)  ·  FAA NAS Status  |
+  +-------------------------------+------------------------------+
+                                  |
+                                  v
+  +--------------------------------------------------------------+
+  |                   Python ETL Orchestrator                    |
+  |     Concurrent extraction, cleaning, and foreign-key joins   |
+  +-------------------------------+------------------------------+
+                                  |
+                                  v
+  +--------------------------------------------------------------+
+  |                     Supabase PostgreSQL                      |
+  |   Relational tables, schema constraints, DEMO/LIVE split     |
+  +-------------------------------+------------------------------+
+                                  |
+                                  v
+  +--------------------------------------------------------------+
+  |            Deterministic Intelligence Engine                 |
+  |   Window proximity, threshold scoring, candidate ranking    |
+  +-------------------------------+------------------------------+
+                                  |
+                                  v
+  +--------------------------------------------------------------+
+  |                      FastAPI Backend                         |
+  |   REST endpoints, operations status, DEMO/LIVE isolation     |
+  +-------------------------------+------------------------------+
+                                  |
+                                  v
+  +--------------------------------------------------------------+
+  |                    React / Vite Dashboard                    |
+  |   Editorial aviation UI, live ribbon, interactive timeline  |
+  +-------------------------------+------------------------------+
+                                  |
+                                  v
+  +--------------------------------------------------------------+
+  |                Optional Ollama Local Analyst                 |
+  |   Grounded Llama 3 report (strictly uses verified facts)     |
+  +--------------------------------------------------------------+
+```
+
+1. **Extraction**: Python pipeline extracts flight telemetry, airport weather, and FAA advisories.
+2. **Persistence**: Validated records are stored in PostgreSQL with strict logical separation between curated demo benchmarks and live observations.
+3. **Deterministic Intelligence**: Evaluates temporal windows, weather thresholds, and FAA event overlaps to produce ranked candidate causes.
+4. **API Service**: FastAPI serves flight summaries, deep investigation records, weather context, and chronological timelines.
+5. **Dashboard**: React interface provides operations filtering, dual DEMO/LIVE mode, and deep-dive delay analysis.
+6. **Local AI Analyst**: When running locally, Ollama generates an investigative narrative grounded entirely on the deterministic evidence bundle.
+
+---
+
+## Data Sources
+
+| Source | Role | Current Behavior & Practical Constraints |
+| :--- | :--- | :--- |
+| **OpenSky Network** | ADS-B flight transponder observations | Provides departure transponder pings. Anonymous public requests are subject to upstream IP rate limits; telemetry pings do not provide commercial timetables or delay figures, so FlightPulse never fabricates schedules when only transponder data is present. |
+| **Open-Meteo** | Surface weather & METAR data | Provides temperature, dew point, wind velocity, peak gusts, cloud cover, and visibility for airport coordinates. |
+| **FAA NAS Status** | Air traffic management advisories | Ingests Ground Stops, Ground Delay Programs (GDP), and severe weather alerts from the FAA Air Traffic Control System Command Center (ATCSCC). Covers US airspace. |
+| **PostgreSQL Benchmark Data** | Curated historical scenarios | Controlled operational records (such as UA415) providing consistent test validation and offline demonstration capability. |
+
+---
+
+## Intelligence Engine
+
+The deterministic intelligence engine is the authoritative core of FlightPulse:
+- **Evidence Gathering**: Assembles all METAR weather observations and FAA NAS events occurring within relevant operational time windows before and during the flight.
+- **Weather Analysis**: Checks wind velocities against operational crosswind thresholds (>25 kts), reduced visibility (<3 statute miles), and convective phenomena (thunderstorms, squalls).
+- **Air Traffic Analysis**: Checks whether departure or arrival airports were subject to active FAA Ground Stops or Ground Delay Programs during the flight window.
+- **Candidate Ranking**: Evaluates multiple potential explanations (`ATC / WEATHER INTERACTION`, `ATC`, `WEATHER`, `AIRLINE_OPERATIONAL`, `UNKNOWN / INSUFFICIENT_EVIDENCE`) and scores each candidate.
+- **Provenance Preservation**: Preserves the carrier's reported delay reason alongside FlightPulse's attribution.
+
+> **Key Design Rule**: The LLM is not the source of truth for causal attribution. All causal ranking and confidence scoring are performed deterministically in Python before any LLM prompt is constructed.
+
+---
+
+## Local AI Analyst
+
+When running locally with Ollama:
+- **Model**: `llama3:latest` running locally via Ollama.
+- **Strict Grounding**: The model is prompted with structured JSON containing only verified facts (flight parameters, METAR observations, active FAA advisories, deterministic scores).
+- **System Directives**: The model is strictly instructed never to invent weather conditions, fabricate delays, or contradict deterministic scores.
+- **Offline Fallback**: When Ollama is not running, the application gracefully presents all deterministic intelligence, candidate breakdowns, and weather facts, clearly indicating that the local AI analyst is offline.
 
 ---
 
 ## Tech Stack
 
-| Domain | Technologies |
+| Layer | Technologies |
 | :--- | :--- |
-| **Backend & API** | Python 3.11, FastAPI, Pydantic v2, Uvicorn |
-| **Database** | PostgreSQL (relational schema, partial unique indexes, foreign key lookups) |
-| **ETL & Data** | Python (`requests`, `psycopg2-binary`), OpenSky REST API, Open-Meteo, FAA ATCSCC |
-| **Intelligence** | Deterministic causal heuristics, weighted scoring, multi-candidate ranking |
-| **AI Layer** | Ollama local inference (`llama3:latest`), structured grounding prompts |
-| **Frontend** | React 19, Vite, Lucide React, Space Mono & Inter typography |
-| **Testing & Quality** | Pytest, oxlint, Vite production build |
+| **Frontend** | React 19, Vite, Lucide React, Vanilla CSS |
+| **Backend** | Python 3.11, FastAPI, Pydantic v2, Uvicorn |
+| **Database** | PostgreSQL 17 (Supabase) |
+| **ETL & Data** | Python (`requests`, `psycopg2-binary`) |
+| **Intelligence** | Deterministic rule-based scoring engine |
+| **Local AI** | Ollama, Llama 3 (`llama3:latest`) |
+| **Deployment** | Vercel (Frontend), Render (Backend), Supabase (Database) |
 
 ---
 
-## Validated Engineering Metrics
-
-- **103 Automated Tests Passed** (`pytest tests/`, 0 failures, 100% passing across ETL, intelligence, API, and orchestrator).
-- **Frontend Code Quality**: `0 warnings and 0 errors` via `oxlint`.
-- **Production Build**: Built cleanly with Vite in under 1 second.
-- **13 Controlled Demo Records**: Retained in PostgreSQL with absolute DEMO/LIVE logical isolation.
-- **0 Fabricated Telemetry Records**: Zero synthetic records generated during upstream rate limits.
-- **UA415 Benchmark Integrity**: Validated with `105 min` weather delay and `ATC / WEATHER INTERACTION (HIGH)` deterministic attribution.
-
----
-
-## Directory Structure
+## Project Structure
 
 ```
 flightpulse/
-├── app/                           # FastAPI Backend
-│   ├── routes/                    # API endpoints (flights, intelligence, weather, disruptions, operations)
-│   ├── schemas/                   # Pydantic validation schemas
-│   ├── services/                  # Business logic & Ollama analyst client
-│   ├── database.py                # Connection pool provider
-│   └── main.py                    # Application entrypoint & static mount
-├── database/                      # PostgreSQL DDL & Seed Scripts
-│   ├── schema.sql                 # Complete relational schema & indexes
-│   └── seed.sql                   # Curated airports, airlines, and demo flights
-├── frontend/                      # React / Vite Operations Dashboard
+├── app/                           # FastAPI backend
+│   ├── routes/                    # API endpoints (flights, intelligence, weather, operations)
+│   ├── schemas/                   # Pydantic request/response models
+│   ├── services/                  # Business logic, flight queries, Ollama analyst client
+│   ├── database.py                # Database connection utilities
+│   └── main.py                    # Application entrypoint & CORS configuration
+├── database/                      # Relational database definitions
+│   ├── schema.sql                 # PostgreSQL DDL, constraints, triggers & views
+│   └── seed.sql                   # Curated benchmark datasets (airports, airlines, flights)
+├── frontend/                      # React / Vite web dashboard
 │   ├── src/
-│   │   ├── components/            # Header, FlightList, FlightHeader, OperationsRibbon, etc.
+│   │   ├── components/            # Header, FlightList, DelayIntelligence, OperationsRibbon
 │   │   ├── api.js                 # API client wrapper
-│   │   ├── App.jsx                # Main application view & workspace
+│   │   ├── App.jsx                # Main layout & state management
 │   │   └── App.css                # Aviation operations editorial styling
 │   ├── package.json
 │   └── vite.config.js
-├── pipeline/                      # Ingestion & Intelligence Pipelines
+├── pipeline/                      # Data ingestion & intelligence pipelines
 │   ├── extract/                   # API clients (OpenSky, Open-Meteo, FAA)
-│   ├── transform/                 # Data cleaners, normalizers & dual-branch parser
-│   ├── load/                      # Idempotent PostgreSQL upsert operations
-│   ├── intelligence/              # Deterministic delay scoring & candidate generator
-│   ├── fixtures/                  # Local JSON fixtures for offline testing
-│   ├── config.py                  # Environment configuration
-│   └── orchestrator.py            # Concurrent multi-source coordinator
-├── tests/                         # Comprehensive Pytest Suite (103 tests)
-├── .env.example                   # Template environment configuration
-├── .gitignore                     # Environment & credential protection
-└── requirements.txt               # Python package dependencies
+│   ├── transform/                 # Data normalizers & schema mappers
+│   ├── load/                      # Idempotent PostgreSQL persistence
+│   ├── intelligence/              # Deterministic delay scoring & candidate generation
+│   ├── fixtures/                  # Local JSON sample data for offline testing
+│   ├── config.py                  # Environment variable configuration
+│   └── orchestrator.py            # Multi-source concurrent sync coordinator
+├── tests/                         # Pytest test suite (103 tests)
+├── init_db.py                     # Database initialization & verification script
+├── requirements.txt               # Python package dependencies
+└── README.md
 ```
 
 ---
 
-## Quickstart & Local Setup
+## Running Locally
 
 ### 1. Prerequisites
 - **Python**: 3.10+
 - **Node.js**: 18+ and `npm`
-- **PostgreSQL**: 14+ running locally
-- **Ollama** (optional, for local AI analyst): [ollama.ai](https://ollama.ai)
+- **PostgreSQL**: 14+ (local instance or cloud database URL)
+- **Ollama** *(optional, for local LLM analyst)*: [ollama.ai](https://ollama.ai)
 
-### 2. Clone Repository
+### 2. Clone the Repository
 ```bash
 git clone https://github.com/harbinks/flightpulse.git
 cd flightpulse
@@ -191,27 +217,30 @@ cd flightpulse
 
 ### 3. Backend Setup
 ```bash
-# Create and activate virtual environment
+# Create and activate a virtual environment
 python -m venv .venv
+
 # On Windows:
 .venv\Scripts\activate
-# On Linux/macOS:
+# On macOS/Linux:
 # source .venv/bin/activate
 
-# Install Python dependencies
+# Install dependencies
 pip install -r requirements.txt
 
-# Configure environment variables
+# Create environment configuration
 cp .env.example .env
-# Edit .env with your local PostgreSQL credentials
 ```
 
-### 4. Database Setup
+Configure your database connection in `.env`:
+```env
+DATABASE_URL=postgresql://postgres:password@localhost:5432/flightpulse
+```
+
+### 4. Initialize Database
+Run the idempotent database setup script to apply the schema and seed benchmark records:
 ```bash
-# Create database and apply schema and seed data
-createdb flightpulse
-psql -d flightpulse -f database/schema.sql
-psql -d flightpulse -f database/seed.sql
+python init_db.py
 ```
 
 ### 5. Frontend Setup
@@ -221,7 +250,8 @@ npm install
 cd ..
 ```
 
-### 6. Run the Application
+### 6. Start Development Servers
+
 In terminal 1 (FastAPI backend):
 ```bash
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
@@ -235,104 +265,65 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-*(Optional) Start Ollama for local grounded analysis:*
+*(Optional) Start Ollama for local LLM analyst narratives:*
 ```bash
 ollama run llama3:latest
 ```
 
 ---
 
-## Deployment Architecture
+## Testing
 
-FlightPulse is architected for cloud-native zero-downtime deployment:
-
-```
-                      +-----------------------------+
-                      |       Vercel Hosting        |
-                      |    (React / Vite SPA Frontend)
-                      +--------------+--------------+
-                                     |
-                                     | HTTPS / JSON
-                                     v
-                      +-----------------------------+
-                      |        Render Hosting       |
-                      |   (FastAPI / Python Web App)|
-                      +--------------+--------------+
-                                     |
-                                     | PostgreSQL TCP
-                                     v
-                      +-----------------------------+
-                      |     Managed PostgreSQL      |
-                      |  (Render / Supabase / Neon) |
-                      +-----------------------------+
-```
-
-### 1. Database Provisioning
-Run `python init_db.py` with your remote database's connection string:
-```bash
-DATABASE_URL="postgres://user:password@hostname:5432/dbname" python init_db.py
-```
-This automatically applies `database/schema.sql` and loads the baseline benchmark flights from `database/seed.sql` while preserving DEMO/LIVE provenance isolation.
-
-### 2. Render Backend Web Service
-- **Build Command**: `pip install -r requirements.txt`
-- **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-- **Environment Variables**:
-  - `DATABASE_URL`: Managed PostgreSQL connection string.
-  - `CORS_ORIGINS`: Your Vercel frontend URL (e.g. `https://flightpulse.vercel.app`).
-  - `PORT`: Automatically assigned by Render.
-
-### 3. Vercel Frontend Deployment
-- **Framework Preset**: Vite
-- **Root Directory**: `frontend`
-- **Build Command**: `npm run build`
-- **Output Directory**: `dist`
-- **Environment Variables**:
-  - `VITE_API_BASE_URL`: Your Render backend service URL (e.g. `https://flightpulse.onrender.com`).
-- **SPA Rewrites**: Pre-configured in [`frontend/vercel.json`](frontend/vercel.json).
-
-### 4. Local AI Analyst in Production
-- Ollama is designed for local and self-hosted environments.
-- In production, when Ollama is not deployed to the cloud container, FlightPulse gracefully activates its deterministic intelligence fallback.
-- The UI transparently notes that the local AI model is offline while delivering 100% of the deterministic flight delay attribution, candidate breakdown, and correlated weather facts without error.
-
----
-
-## Key API Endpoints
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/health` | Application and PostgreSQL health status |
-| `GET` | `/flights?mode=demo` | Retrieve curated benchmark flights |
-| `GET` | `/flights?mode=live` | Retrieve live ADS-B flights |
-| `GET` | `/flights/{id}` | Flight details, aircraft type, and route info |
-| `GET` | `/flights/{id}/intelligence` | Deterministic delay attribution & candidate scores |
-| `GET` | `/flights/{id}/weather` | Correlated surface METAR observations |
-| `GET` | `/flights/{id}/disruptions` | Correlated FAA ground stops and NAS programs |
-| `GET` | `/flights/{id}/ai-analysis` | Grounded Ollama LLM investigation report |
-| `GET` | `/operations/status` | Ingestion health, sync audit, and rate-limit status |
-| `POST` | `/operations/sync?mode=live` | Trigger on-demand multi-feed synchronization |
-
----
-
-## Running Verification Tests
+The codebase has an automated test suite verifying data transformation, intelligence scoring, API endpoints, and orchestrator fault isolation:
 
 ```bash
-# Run complete Python test suite
+# Run backend test suite (103 tests)
 python -m pytest tests/
 
 # Run frontend linting
 cd frontend
 npm run lint
 
-# Run frontend production build
+# Verify frontend production build
 npm run build
 ```
 
+**Validated Test Status**:
+- **103 / 103 Python backend tests passing** across all pipeline, intelligence, API, and orchestration modules.
+- **Frontend linter clean** (`oxlint` reported 0 errors and 0 warnings).
+- **Production bundle verified** via Vite.
+
 ---
 
-## What I Learned Building FlightPulse
+## Deployment
 
-1. **ADS-B Telemetry is Not a Commercial Schedule**: An ADS-B observation gives you a transponder ping and a departure timestamp. It does not give you scheduled gate departure, commercial flight number, or delay reason. Conflating the two creates false data; keeping them separate keeps your system honest.
-2. **Grounding LLMs Requires Deterministic Boundaries**: Letting an LLM deduce flight delay causes directly from raw numbers leads to subtle hallucinations. Generating deterministic scores first and forcing the model to synthesize only confirmed facts produces dependable, production-ready analysis.
-3. **External API Quotas Must Be First-Class Citizens**: Rather than treating an HTTP 429 as a catastrophic failure, modeling rate-limited states explicitly in the database, API, and UI keeps operators informed without breaking system integrity.
+The public architecture is deployed across three services:
+
+- **Frontend**: [Vercel](https://flightpulse-psi.vercel.app/) — React/Vite single-page application.
+- **Backend**: [Render](https://flightpulse-51i5.onrender.com) — FastAPI application running in Python web service.
+- **Database**: [Supabase](https://supabase.com) — Managed PostgreSQL database.
+
+*Note: Render's free tier spins down web services after periods of inactivity. Initial requests after dormancy may take 30–60 seconds while the backend instance spins up.*
+
+---
+
+## Current Limitations
+
+1. **Local-Only LLM**: Ollama and Llama 3 run locally; the public Render deployment relies on the deterministic engine and transparently displays an offline indicator for the AI narrative.
+2. **OpenSky Rate Limiting**: Anonymous public calls to OpenSky are subject to upstream IP quotas. The pipeline reports `RATE_LIMITED` gracefully rather than breaking.
+3. **Telemetry vs. Schedule Semantics**: Live ADS-B observations record aircraft presence, not commercial timetables. FlightPulse does not fabricate scheduled times or delay minutes for telemetry-only observations.
+4. **Geographic Coverage**: FAA ATCSCC disruption advisories are US-centric.
+5. **Inference vs. Absolute Causality**: Deterministic attributions are evidence-based correlations, not absolute physical or operational proof.
+6. **Free-Tier Cold Starts**: Render hosting may take up to a minute to awaken on first load.
+
+---
+
+## Roadmap
+
+- [ ] Authenticated live flight data feeds with higher request allowances.
+- [ ] Broader global coverage for international air traffic management advisories.
+- [ ] Persistent time-series telemetry storage for multi-week historical delay trending.
+- [ ] Tail-number rotation analysis to trace inbound aircraft turnaround cascades.
+- [ ] Optional cloud-hosted LLM endpoint for production analyst generation.
+- [ ] Refined causal score calibration against historical DOT/BTS delay data.
+- [ ] Automated monitoring and alert notifications for critical ground stops.
